@@ -1,0 +1,51 @@
+name: Import Quaternius Sci-Fi Assets
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  import-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download CC0 Modular Sci-Fi MegaKit
+        run: |
+          set -e
+          mkdir -p /tmp/q
+          curl -L --fail --retry 3 "https://opengameart.org/sites/default/files/modular_scifi_megakitstandard.zip" -o /tmp/q/scifi.zip
+          unzip -q /tmp/q/scifi.zip -d /tmp/q/unpacked
+          echo "Top-level contents:"
+          find /tmp/q/unpacked -maxdepth 3 -type d | head -80
+      - name: Copy glTF assets into repository
+        run: |
+          set -e
+          DEST="assets/vendor/quaternius-scifi"
+          mkdir -p "$DEST"
+          find /tmp/q/unpacked -type f \( -iname '*.gltf' -o -iname '*.glb' -o -iname '*.bin' -o -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) -print0 | xargs -0 -I{} cp --parents "{}" "$DEST" || true
+          find "$DEST" -type f | sed 's#^#IMPORTED #'
+          cat > "$DEST/LICENSE.txt" <<'EOF'
+Modular Sci-Fi MegaKit by Quaternius
+License: CC0 1.0 Universal
+Source: https://opengameart.org/content/modular-sci-fi-megakit
+Imported for The Shelter project.
+EOF
+      - name: Flatten temporary path prefix
+        run: |
+          set -e
+          DEST="assets/vendor/quaternius-scifi"
+          if [ -d "$DEST/tmp/q/unpacked" ]; then
+            cp -a "$DEST/tmp/q/unpacked/." "$DEST/"
+            rm -rf "$DEST/tmp"
+          fi
+      - name: Commit imported assets
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/vendor/quaternius-scifi
+          if git diff --cached --quiet; then
+            echo "No asset changes"
+            exit 0
+          fi
+          git commit -m "Import Quaternius CC0 sci-fi assets"
+          git push
