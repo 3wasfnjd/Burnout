@@ -1,0 +1,48 @@
+name: Restrict Interaction To Door
+on:
+  push:
+    paths:
+      - '.github/workflows/restrict-door-interaction.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restrict puzzle interaction to door area
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p=Path('src/puzzles.js')
+          s=p.read_text()
+          s=s.replace('export function bindPuzzles({getRoom,onSolved}){','export function bindPuzzles({getRoom,onSolved,canOpen}){',1)
+          old=' function open(){const r=getRoom(),t=types[r];modal.classList.add(\'show\');'
+          new=' function open(){if(canOpen&&!canOpen()){status.textContent=\'اقترب من لوحة الباب للتفاعل\';status.className=\'status\';return false}const r=getRoom(),t=types[r];modal.classList.add(\'show\');'
+          if old not in s:
+              raise SystemExit('puzzles open() signature not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+
+          m=Path('src/main.js')
+          s=m.read_text()
+          old="const puzzles=bindPuzzles({getRoom:()=>roomIndex,onSolved:()=>syncUI()});"
+          new="const doorPoint=new THREE.Vector3(4.15,.9,-2.55);function nearDoor(){if(xrKind==='vr')return Math.hypot(xrRig.position.x-doorPoint.x,xrRig.position.z-doorPoint.z)<1.65;if(xrKind==='ar')return true;return Math.hypot(player.position.x-doorPoint.x,player.position.z-doorPoint.z)<1.65}const puzzles=bindPuzzles({getRoom:()=>roomIndex,onSolved:()=>syncUI(),canOpen:nearDoor});"
+          if old not in s:
+              raise SystemExit('bindPuzzles call not found')
+          s=s.replace(old,new,1)
+          old="function animate(){const modal=document.getElementById('modal'),dt=Math.min(.033,clock.getDelta());"
+          new="function animate(){const modal=document.getElementById('modal'),dt=Math.min(.033,clock.getDelta());const useBtn=document.getElementById('use');if(useBtn){const n=nearDoor();useBtn.disabled=!n;useBtn.style.opacity=n?'1':'.28';useBtn.title=n?'تفاعل مع لوحة الباب':'اقترب من لوحة الباب'}"
+          if old not in s:
+              raise SystemExit('animate start not found')
+          s=s.replace(old,new,1)
+          m.write_text(s)
+          PY
+      - name: Commit door interaction restriction
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main.js src/puzzles.js
+          git commit -m "Restrict puzzle interaction to door proximity"
+          git push
