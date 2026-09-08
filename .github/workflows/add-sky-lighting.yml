@@ -1,0 +1,40 @@
+name: Add sky and brighter shelter lighting
+on:
+  push:
+    paths:
+      - '.github/workflows/add-sky-lighting.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add sky gradient and brighten scene
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/main.js')
+          s=p.read_text()
+          old="const scene=new THREE.Scene();scene.background=new THREE.Color(0x050606);scene.fog=new THREE.Fog(0x050606,22,48);"
+          new="""const scene=new THREE.Scene();
+const skyCanvas=document.createElement('canvas');skyCanvas.width=skyCanvas.height=512;const skyCtx=skyCanvas.getContext('2d'),skyGrad=skyCtx.createLinearGradient(0,0,0,512);skyGrad.addColorStop(0,'#6f8fa8');skyGrad.addColorStop(.5,'#a7b7bf');skyGrad.addColorStop(1,'#d5c2a6');skyCtx.fillStyle=skyGrad;skyCtx.fillRect(0,0,512,512);const skyTexture=new THREE.CanvasTexture(skyCanvas);skyTexture.colorSpace=THREE.SRGBColorSpace;scene.background=skyTexture;scene.fog=new THREE.Fog(0x9aa8ad,28,62);"""
+          if old not in s: raise SystemExit('scene background block not found')
+          s=s.replace(old,new,1)
+          old="renderer.toneMappingExposure=1.42;"
+          if old not in s: raise SystemExit('exposure not found')
+          s=s.replace(old,"renderer.toneMappingExposure=1.62;",1)
+          old="scene.add(new THREE.HemisphereLight(0xffd8ab,0x101518,.43));const key=new THREE.DirectionalLight(0xffbd71,.55);"
+          if old not in s: raise SystemExit('lighting block not found')
+          s=s.replace(old,"scene.add(new THREE.HemisphereLight(0xddeeff,0x403a34,1.05));const fill=new THREE.AmbientLight(0xfff2dc,.38);scene.add(fill);const key=new THREE.DirectionalLight(0xffd3a0,1.05);",1)
+          p.write_text(s)
+          PY
+      - name: Verify syntax
+        run: node --check src/main.js
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main.js
+          git commit -m "Add brighter sky gradient and shelter lighting" || exit 0
+          git push
