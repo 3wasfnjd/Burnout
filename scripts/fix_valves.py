@@ -16,3 +16,5 @@ repl="""function drawVrValves(){clearVrItems();vrState.a.forEach((r,i)=>{const g
 s,n=pat.subn(repl,s,count=1)
 if n!=1: raise SystemExit('VR valves block not found')
 p.write_text(s)
+
+# trigger refresh
