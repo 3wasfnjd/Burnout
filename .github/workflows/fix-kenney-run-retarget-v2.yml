@@ -1,0 +1,57 @@
+name: Fix Kenney Run Retarget V2
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-kenney-run-retarget-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retarget run and remove startup fallback flash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+
+          imp="import {OrbitControls} from 'three/addons/controls/OrbitControls.js';"
+          if "SkeletonUtils" not in s:
+              if imp not in s:
+                  raise SystemExit('OrbitControls import not found')
+              s=s.replace(imp,imp+"\nimport * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';",1)
+
+          old="if(runFbx.animations[0]){runAction=mixer.clipAction(runFbx.animations[0],model);runAction.setLoop(THREE.LoopRepeat,Infinity);runAction.timeScale=.72}"
+          new="if(runFbx.animations[0]){const runClip=SkeletonUtils.retargetClip(model,runFbx,runFbx.animations[0],{hip:'Hips',preservePosition:false,preserveHipPosition:true,useFirstFramePosition:false});runAction=mixer.clipAction(runClip,model);runAction.setLoop(THREE.LoopRepeat,Infinity);runAction.timeScale=.72}"
+          if old not in s:
+              raise SystemExit('Current run action line not found')
+          s=s.replace(old,new,1)
+
+          startup="\nfallbackBoy();\nconst fbxLoader=new FBXLoader();"
+          if startup in s:
+              s=s.replace(startup,"\nconst fbxLoader=new FBXLoader();",1)
+
+          oldcatch="}).catch(err=>console.error('Kenney character load failed',err));"
+          newcatch="}).catch(err=>{console.error('Kenney character load failed',err);fallbackBoy()});"
+          if oldcatch in s:
+              s=s.replace(oldcatch,newcatch,1)
+
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then
+            echo 'No changes.'
+          else
+            git commit -m 'Retarget run animation and remove fallback flash'
+            git push
+          fi
