@@ -1,0 +1,21 @@
+name: Run XR Fix
+on:
+  push:
+    paths:
+      - '.github/workflows/run-xr-fix.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply XR patch
+        run: python3 .github/scripts/fix_xr.py
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main.js src/puzzles.js
+          git commit -m "Fix Quest VR controls add VR puzzles and AR placement"
+          git push
