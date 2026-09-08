@@ -21,17 +21,55 @@ jobs:
           p=Path('index.html')
           s=p.read_text(encoding='utf-8')
 
-          old_run="if(runFbx.animations[0]){const runClip=SkeletonUtils.retargetClip(model,runFbx,runFbx.animations[0],{hip:'Hips',preservePosition:false,preserveHipPosition:true,useFirstFramePosition:false});runAction=mixer.clipAction(runClip,model);runAction.setLoop(THREE.LoopRepeat,Infinity);runAction.timeScale=.72}"
-          new_run="if(runFbx.animations[0]){const src=runFbx.animations[0];const lowerTracks=src.tracks.filter(t=>/(hip|leg|foot|toe)/i.test(t.name));const runClip=new THREE.AnimationClip('runLowerBody',src.duration,lowerTracks);runAction=mixer.clipAction(runClip,model);runAction.setLoop(THREE.LoopRepeat,Infinity);runAction.timeScale=.72}"
-          if old_run not in s:
-              raise SystemExit('run retarget block not found')
-          s=s.replace(old_run,new_run,1)
+          s=s.replace("import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';\n", "")
 
-          old_catch="}).catch(err=>{console.error('Kenney character load failed',err);fallbackBoy()});"
-          new_catch="}).catch(err=>{console.error('Kenney character load failed',err);if(!model){player.clear();fallbackBoy()}});"
-          if old_catch not in s:
-              raise SystemExit('catch block not found')
-          s=s.replace(old_catch,new_catch,1)
+          old="const player=new THREE.Group();player.position.set(-.25,.12,.55);scene.add(player);let model=null,walkParts=null;let modelBaseY=0;let mixer=null,idleAction=null,runAction=null,currentAction=null;"
+          new="const player=new THREE.Group();player.position.set(-.25,.12,.55);scene.add(player);let model=null,walkParts=null;let modelBaseY=0;let mixer=null,idleAction=null;let kenneyBones=null;"
+          if old not in s: raise SystemExit('vars marker not found')
+          s=s.replace(old,new,1)
+
+          old="function setCharacterAction(moving){const next=moving?runAction:idleAction;if(!next||next===currentAction)return;if(currentAction)currentAction.fadeOut(.18);next.reset().fadeIn(.18).play();currentAction=next}"
+          new="""function findKenneyBones(root){const out={};root.traverse(o=>{if(!o.isBone)return;const n=o.name.toLowerCase().replace(/[^a-z]/g,'');if(!out.hips&&/hips|pelvis/.test(n))out.hips=o;if(!out.leftLeg&&/(left.*leg|leg.*left|leftupleg|leftthigh)/.test(n))out.leftLeg=o;if(!out.rightLeg&&/(right.*leg|leg.*right|rightupleg|rightthigh)/.test(n))out.rightLeg=o;if(!out.leftFoot&&/(left.*foot|foot.*left)/.test(n))out.leftFoot=o;if(!out.rightFoot&&/(right.*foot|foot.*right)/.test(n))out.rightFoot=o});return out}
+const walkAxis=new THREE.Vector3(1,0,0),walkQ=new THREE.Quaternion();
+function offsetBone(bone,angle){if(!bone)return;walkQ.setFromAxisAngle(walkAxis,angle);bone.quaternion.multiply(walkQ)}
+function applyKenneyWalk(t,speed){if(!kenneyBones)return;const p=Math.sin(t),q=Math.sin(t+Math.PI);const stride=.42*Math.min(1,speed/2.3);offsetBone(kenneyBones.leftLeg,p*stride);offsetBone(kenneyBones.rightLeg,q*stride);offsetBone(kenneyBones.leftFoot,-p*stride*.4);offsetBone(kenneyBones.rightFoot,-q*stride*.4);if(kenneyBones.hips){walkQ.setFromAxisAngle(walkAxis,Math.abs(p)*.025);kenneyBones.hips.quaternion.multiply(walkQ)}}"""
+          if old not in s: raise SystemExit('action marker not found')
+          s=s.replace(old,new,1)
+
+          old="""Promise.all([
+  fbxLoader.loadAsync('./assets/kenney/characterMedium.fbx'),
+  fbxLoader.loadAsync('./assets/kenney/idle.fbx'),
+  fbxLoader.loadAsync('./assets/kenney/run.fbx'),
+  new THREE.TextureLoader().loadAsync('./assets/kenney/humanMaleA.png')
+]).then(([obj,idleFbx,runFbx,tex])=>{"""
+          new="""Promise.all([
+  fbxLoader.loadAsync('./assets/kenney/characterMedium.fbx'),
+  fbxLoader.loadAsync('./assets/kenney/idle.fbx'),
+  new THREE.TextureLoader().loadAsync('./assets/kenney/humanMaleA.png')
+]).then(([obj,idleFbx,tex])=>{"""
+          if old not in s: raise SystemExit('promise marker not found')
+          s=s.replace(old,new,1)
+
+          old="""  mixer=new THREE.AnimationMixer(model);
+  if(idleFbx.animations[0]){idleAction=mixer.clipAction(idleFbx.animations[0],model);idleAction.setLoop(THREE.LoopRepeat,Infinity);idleAction.play();currentAction=idleAction}
+  if(runFbx.animations[0]){const src=runFbx.animations[0];const lowerTracks=src.tracks.filter(t=>/(hip|leg|foot|toe)/i.test(t.name));const runClip=new THREE.AnimationClip('runLowerBody',src.duration,lowerTracks);runAction=mixer.clipAction(runClip,model);runAction.setLoop(THREE.LoopRepeat,Infinity);runAction.timeScale=.72}
+"""
+          new="""  mixer=new THREE.AnimationMixer(model);
+  kenneyBones=findKenneyBones(model);
+  if(idleFbx.animations[0]){idleAction=mixer.clipAction(idleFbx.animations[0],model);idleAction.setLoop(THREE.LoopRepeat,Infinity);idleAction.play()}
+"""
+          if old not in s: raise SystemExit('anim setup marker not found')
+          s=s.replace(old,new,1)
+
+          old="const speed=velocity.length();const moving=speed>.12;if(mixer){setCharacterAction(moving);mixer.update(dt)}"
+          new="const speed=velocity.length();const moving=speed>.12;if(mixer){mixer.update(dt);if(moving){walkT+=dt*(6.2+speed*.65);applyKenneyWalk(walkT,speed)}}"
+          if old not in s: raise SystemExit('mixer update marker not found')
+          s=s.replace(old,new,1)
+
+          old="if(moving){const target=Math.atan2(velocity.x,velocity.z);let d=target-player.rotation.y;d=Math.atan2(Math.sin(d),Math.cos(d));player.rotation.y+=d*(1-Math.exp(-12*dt));walkT+=dt*(7.2+speed*.7);const step=Math.sin(walkT);"
+          new="if(moving){const target=Math.atan2(velocity.x,velocity.z);let d=target-player.rotation.y;d=Math.atan2(Math.sin(d),Math.cos(d));player.rotation.y+=d*(1-Math.exp(-12*dt));if(!mixer)walkT+=dt*(7.2+speed*.7);const step=Math.sin(walkT);"
+          if old not in s: raise SystemExit('walk time marker not found')
+          s=s.replace(old,new,1)
 
           p.write_text(s,encoding='utf-8')
           PY
@@ -43,6 +81,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'No changes'
           else
-            git commit -m 'Fix character overlap and lower-body run animation'
+            git commit -m 'Use Kenney native skeleton for walking'
             git push
           fi
