@@ -1,0 +1,49 @@
+name: Retarget Kenney Run Animation
+
+on:
+  push:
+    paths:
+      - '.github/workflows/retarget-kenney-run.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch run animation retargeting
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+
+          imp = "import {OrbitControls} from 'three/addons/controls/OrbitControls.js';"
+          add = imp + "\nimport * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';"
+          if "SkeletonUtils" not in s:
+              if imp not in s:
+                  raise SystemExit('OrbitControls import not found')
+              s = s.replace(imp, add, 1)
+
+          old = "fbxLoader.load('./assets/kenney/run.fbx',a=>{if(a.animations[0]){runAction=mixer.clipAction(a.animations[0]);runAction.timeScale=.72}})"
+          new = "fbxLoader.load('./assets/kenney/run.fbx',a=>{if(a.animations[0]){const clip=SkeletonUtils.retargetClip(model,a,a.animations[0],{hip:'Hips',preservePosition:false,preserveHipPosition:true,useFirstFramePosition:false});runAction=mixer.clipAction(clip);runAction.timeScale=.72}})"
+          if old not in s:
+              raise SystemExit('Run loader block not found')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Commit fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then
+            echo 'No changes.'
+          else
+            git commit -m 'Retarget Kenney run animation to player skeleton'
+            git push
+          fi
