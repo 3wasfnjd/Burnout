@@ -1,0 +1,36 @@
+name: Add Shelter Ambient Music
+on:
+  push:
+    paths:
+      - '.github/workflows/add-ambient-music.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add ambient soundtrack
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/main.js')
+          s=p.read_text()
+          marker="const desktopBg=scene.background,desktopFog=scene.fog;"
+          music="""const bgm=new Audio('https://opengameart.org/sites/default/files/sector_0.mp3');bgm.loop=true;bgm.volume=.22;bgm.preload='auto';let bgmStarted=false;const startBgm=()=>{if(bgmStarted)return;bgm.play().then(()=>bgmStarted=true).catch(()=>{})};['pointerdown','keydown','touchstart'].forEach(e=>addEventListener(e,startBgm,{once:true,passive:true}));const musicBtn=document.createElement('button');musicBtn.id='musicBtn';musicBtn.textContent='🔊';musicBtn.title='تشغيل/كتم الموسيقى';Object.assign(musicBtn.style,{position:'fixed',left:'12px',top:'12px',zIndex:'45',width:'42px',height:'42px',borderRadius:'50%',border:'1px solid #ffffff33',background:'#111c',color:'#fff',fontSize:'18px'});musicBtn.onclick=()=>{startBgm();bgm.muted=!bgm.muted;musicBtn.textContent=bgm.muted?'🔇':'🔊'};document.body.appendChild(musicBtn);\n"""
+          if 'sector_0.mp3' not in s:
+              s=s.replace(marker,music+marker,1)
+          s=s.replace("renderer.xr.addEventListener('sessionstart',()=>{", "renderer.xr.addEventListener('sessionstart',()=>{startBgm();",1)
+          p.write_text(s)
+          css=Path('game.css')
+          c=css.read_text()
+          extra="\n.xr-active #musicBtn{display:none!important}"
+          if '.xr-active #musicBtn' not in c: css.write_text(c+extra)
+          PY
+      - name: Commit music
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main.js game.css
+          git commit -m "Add CC0 dark sci-fi ambient soundtrack" || exit 0
+          git push
