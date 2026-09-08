@@ -22,6 +22,7 @@
 import * as THREE from 'three';
 import {FBXLoader} from 'three/addons/loaders/FBXLoader.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 const scene=new THREE.Scene();scene.background=new THREE.Color(0x141816);scene.fog=new THREE.Fog(0x141816,24,52);
 const camera=new THREE.OrthographicCamera(-10,10,6,-6,.1,100);camera.position.set(12.8,10.8,17.8);
@@ -52,7 +53,6 @@ for(const [x,z] of [[-6.55,-1.9],[2.9,-2.4],[6.75,2.15]]){box(.45,.32,.45,M.wood
 const player=new THREE.Group();player.position.set(-.25,.12,.55);scene.add(player);let model=null,walkParts=null;let modelBaseY=0;let mixer=null,idleAction=null,runAction=null,currentAction=null;
 function fallbackBoy(){const g=new THREE.Group();const torso=new THREE.Mesh(new THREE.CapsuleGeometry(.34,.72,4,8),M.red);torso.position.y=1.13;g.add(torso);const head=new THREE.Mesh(new THREE.SphereGeometry(.31,12,8),M.skin);head.position.y=1.96;g.add(head);const hair=new THREE.Mesh(new THREE.SphereGeometry(.32,10,7,0,Math.PI*2,0,Math.PI*.52),M.hair);hair.position.y=2.09;g.add(hair);const l1=new THREE.Mesh(new THREE.BoxGeometry(.2,.72,.24),M.dark),l2=l1.clone();l1.position.set(-.17,.39,0);l2.position.set(.17,.39,0);g.add(l1,l2);const a1=new THREE.Mesh(new THREE.CapsuleGeometry(.1,.5,3,6),M.skin),a2=a1.clone();a1.position.set(-.44,1.14,0);a2.position.set(.44,1.14,0);g.add(a1,a2);const backpack=new THREE.Mesh(new THREE.BoxGeometry(.55,.7,.3),M.wood);backpack.position.set(0,1.22,.26);g.add(backpack);g.traverse(o=>{if(o.isMesh)o.castShadow=true});player.add(g);model=g;walkParts={l1,l2,a1,a2};modelBaseY=0}
 function setCharacterAction(moving){const next=moving?runAction:idleAction;if(!next||next===currentAction)return;if(currentAction)currentAction.fadeOut(.18);next.reset().fadeIn(.18).play();currentAction=next}
-fallbackBoy();
 const fbxLoader=new FBXLoader();
 Promise.all([
   fbxLoader.loadAsync('./assets/kenney/characterMedium.fbx'),
@@ -83,8 +83,8 @@ Promise.all([
   player.clear();model=obj;player.add(model);walkParts=null;modelBaseY=model.position.y;
   mixer=new THREE.AnimationMixer(model);
   if(idleFbx.animations[0]){idleAction=mixer.clipAction(idleFbx.animations[0],model);idleAction.setLoop(THREE.LoopRepeat,Infinity);idleAction.play();currentAction=idleAction}
-  if(runFbx.animations[0]){runAction=mixer.clipAction(runFbx.animations[0],model);runAction.setLoop(THREE.LoopRepeat,Infinity);runAction.timeScale=.72}
-}).catch(err=>console.error('Kenney character load failed',err));
+  if(runFbx.animations[0]){const runClip=SkeletonUtils.retargetClip(model,runFbx,runFbx.animations[0],{hip:'Hips',preservePosition:false,preserveHipPosition:true,useFirstFramePosition:false});runAction=mixer.clipAction(runClip,model);runAction.setLoop(THREE.LoopRepeat,Infinity);runAction.timeScale=.72}
+}).catch(err=>{console.error('Kenney character load failed',err);fallbackBoy()});
 const keys={up:false,down:false,left:false,right:false};let joyX=0,joyY=0,near=false,unlocked=false,puzzle=[],walkT=0;const prompt=document.getElementById('prompt'),modal=document.getElementById('modal'),msg=document.getElementById('msg');
 function key(e,v){const k=e.key.toLowerCase();if(k==='w'||k==='arrowup')keys.up=v;if(k==='s'||k==='arrowdown')keys.down=v;if(k==='a'||k==='arrowleft')keys.left=v;if(k==='d'||k==='arrowright')keys.right=v;if(v&&(k==='e'||k==='enter')&&near)openPuzzle()}addEventListener('keydown',e=>key(e,true));addEventListener('keyup',e=>key(e,false));
 const joy=document.getElementById('joy'),knob=document.getElementById('knob');let pid=null;function moveJoy(e){const r=joy.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;let dx=e.clientX-cx,dy=e.clientY-cy;const max=39,l=Math.hypot(dx,dy)||1;if(l>max){dx*=max/l;dy*=max/l}joyX=dx/max;joyY=dy/max;knob.style.transform=`translate(${dx}px,${dy}px)`}joy.onpointerdown=e=>{e.stopPropagation();pid=e.pointerId;joy.setPointerCapture(pid);moveJoy(e)};joy.onpointermove=e=>{if(e.pointerId===pid)moveJoy(e)};function endJoy(e){if(e.pointerId!==pid)return;pid=null;joyX=joyY=0;knob.style.transform='translate(0,0)'}joy.onpointerup=endJoy;joy.onpointercancel=endJoy;
