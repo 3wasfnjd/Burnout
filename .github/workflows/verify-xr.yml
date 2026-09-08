@@ -1,0 +1,14 @@
+name: Verify XR JavaScript
+on:
+  push:
+    paths:
+      - '.github/workflows/verify-xr.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check
+        run: |
+          node --check src/main.js
+          node --check src/puzzles.js
