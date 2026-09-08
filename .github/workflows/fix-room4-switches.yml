@@ -1,0 +1,47 @@
+name: Fix room 4 switch interaction
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-room4-switches.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Improve room 4 switch interaction and lamps
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p=Path('src/puzzles.js')
+          s=p.read_text()
+          pat=re.compile(r" function circuit\(\)\{.*?\}\n function jigsaw\(\)",re.S)
+          repl=r''' function circuit(){let a=[0,0,0,0],target=getRoom()===7?[1,0,1,1]:[1,1,0,1];const draw=()=>stage((s,h)=>{a.forEach((v,i)=>{const g=new THREE.Group();g.position.x=(i-1.5)*1.8;g.userData.idx=i;const base=new THREE.Mesh(new THREE.BoxGeometry(1.2,2,.5),dark());base.userData.idx=i;g.add(base);const lever=new THREE.Mesh(new THREE.BoxGeometry(.28,1.25,.28),new THREE.MeshStandardMaterial({color:v?0x45b86a:0xb84c42,metalness:.5,roughness:.32}));lever.position.y=v?.35:-.35;lever.rotation.z=v?-.55:.55;lever.userData.idx=i;g.add(lever);const lampMat=new THREE.MeshStandardMaterial({color:v?0x46ff78:0xff4747,emissive:v?0x22cc55:0xcc2222,emissiveIntensity:4});const bulb=new THREE.Mesh(new THREE.SphereGeometry(.22,18,12),lampMat);bulb.position.set(0,.78,.34);bulb.userData.idx=i;g.add(bulb);const halo=new THREE.Mesh(new THREE.TorusGeometry(.29,.045,10,24),new THREE.MeshBasicMaterial({color:v?0x76ff99:0xff6b6b}));halo.position.set(0,.78,.32);halo.userData.idx=i;g.add(halo);const hitbox=new THREE.Mesh(new THREE.BoxGeometry(1.05,1.8,.65),new THREE.MeshBasicMaterial({transparent:true,opacity:.001,depthWrite:false}));hitbox.position.z=.18;hitbox.userData.idx=i;g.add(hitbox);s.add(g);g.traverse(o=>{if(o.isMesh)h.push(o)})})},i=>{a[i]^=1;status.textContent='المفتاح '+(i+1)+': '+(a[i]?'تشغيل':'إيقاف');status.className='status';if(a.every((x,j)=>x===target[j])){complete();return}draw()});draw()}
+ function jigsaw()'''
+          s,n=pat.subn(repl,s,count=1)
+          if n!=1: raise SystemExit('flat circuit block not found')
+          p.write_text(s)
+
+          p=Path('src/main.js')
+          s=p.read_text()
+          pat=re.compile(r"function drawVrCircuit\(\)\{.*?\}\nfunction xrRayPick\(controller\)",re.S)
+          repl=r'''function drawVrCircuit(){clearVrItems();vrState.a.forEach((v,i)=>{const g=new THREE.Group();g.position.set((i-1.5)*.55,-.05,.08);g.userData.item=true;const base=new THREE.Mesh(new THREE.BoxGeometry(.42,.82,.14),new THREE.MeshStandardMaterial({color:0x292d31,metalness:.5}));const lever=new THREE.Mesh(new THREE.BoxGeometry(.1,.44,.11),new THREE.MeshStandardMaterial({color:v?0x4fcf70:0xcf5148}));lever.position.y=v?.12:-.12;lever.rotation.z=v?-.55:.55;const lamp=new THREE.Mesh(new THREE.SphereGeometry(.085,14,10),new THREE.MeshStandardMaterial({color:v?0x46ff78:0xff4747,emissive:v?0x22cc55:0xcc2222,emissiveIntensity:4}));lamp.position.set(0,.3,.11);const act=()=>{vrState.a[i]^=1;if(vrState.a.every((x,j)=>x===vrState.target[j])){vrFinish();return}drawVrCircuit()};base.userData.action=act;lever.userData.action=act;lamp.userData.action=act;const hitbox=new THREE.Mesh(new THREE.BoxGeometry(.48,.9,.25),new THREE.MeshBasicMaterial({transparent:true,opacity:.001,depthWrite:false}));hitbox.position.z=.08;hitbox.userData.action=act;g.add(base,lever,lamp,hitbox);vrHits.push(base,lever,lamp,hitbox);vrPuzzle.add(g)})}
+function xrRayPick(controller)'''
+          s,n=pat.subn(repl,s,count=1)
+          if n!=1: raise SystemExit('VR circuit block not found')
+          p.write_text(s)
+          PY
+      - name: Verify syntax
+        run: |
+          node --check src/main.js
+          node --check src/puzzles.js
+      - name: Commit fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main.js src/puzzles.js
+          git commit -m "Fix room 4 switch interaction and add indicator lamps" || exit 0
+          git push
