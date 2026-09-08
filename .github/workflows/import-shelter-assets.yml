@@ -15,8 +15,8 @@ jobs:
         run: |
           set -e
           mkdir -p assets/vendor downloads
-          curl -L --fail 'https://kenney.nl/media/pages/assets/furniture-kit/5b45f5d91b-1677663581/kenney_furniture-kit.zip' -o downloads/furniture.zip
-          curl -L --fail 'https://kenney.nl/media/pages/assets/ui-pack-sci-fi/2c3e4500d9-1726062442/kenney_ui-pack-sci-fi.zip' -o downloads/ui.zip
+          curl -L --fail 'https://kenney.nl/media/pages/assets/furniture-kit/440e0608a4-1677580847/kenney_furniture-kit.zip' -o downloads/furniture.zip
+          curl -L --fail 'https://kenney.nl/media/pages/assets/ui-pack-sci-fi/b67c2acd31-1724181109/kenney_ui-pack-space-expansion.zip' -o downloads/ui.zip
           mkdir -p assets/vendor/kenney-furniture assets/vendor/kenney-ui-scifi
           unzip -oq downloads/furniture.zip -d assets/vendor/kenney-furniture
           unzip -oq downloads/ui.zip -d assets/vendor/kenney-ui-scifi
