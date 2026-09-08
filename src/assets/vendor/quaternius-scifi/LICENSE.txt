@@ -1,0 +1,4 @@
+Modular Sci-Fi MegaKit by Quaternius
+License: CC0 1.0 Universal
+Source: https://opengameart.org/content/modular-sci-fi-megakit
+Imported for The Shelter project.
