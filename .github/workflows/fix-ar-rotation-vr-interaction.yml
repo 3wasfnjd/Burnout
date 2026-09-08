@@ -1,0 +1,57 @@
+name: Fix AR rotation and Quest puzzle controls
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-ar-rotation-vr-interaction.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch XR controls
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/main.js')
+          s=p.read_text()
+
+          old="const arControls=document.createElement('div');arControls.id='arControls';arControls.innerHTML='<button id=arMinus>−</button><button id=arPlace>تحديد الموقع</button><button id=arPlus>+</button>';Object.assign(arControls.style,{display:'none',position:'fixed',left:'50%',bottom:'72px',transform:'translateX(-50%)',zIndex:'60',gap:'8px',direction:'rtl'});document.body.appendChild(arControls);for(const b of arControls.querySelectorAll('button'))Object.assign(b.style,{padding:'10px 14px',borderRadius:'10px',border:'1px solid #ffffff44',background:'#101315dd',color:'#fff',fontWeight:'800'});document.getElementById('arMinus').onclick=()=>setArScale(arScale-.05);document.getElementById('arPlus').onclick=()=>setArScale(arScale+.05);document.getElementById('arPlace').onclick=()=>{arPlaced=false;arReticle.visible=false;if(root)root.visible=false};function setArScale(v){arScale=THREE.MathUtils.clamp(v,.12,.9);if(root&&xrKind==='ar')root.scale.setScalar(arScale)}"
+          new="const arControls=document.createElement('div');arControls.id='arControls';arControls.innerHTML='<button id=arRotL>↺</button><button id=arMinus>−</button><button id=arPlace>تحديد الموقع</button><button id=arPlus>+</button><button id=arRotR>↻</button>';Object.assign(arControls.style,{display:'none',position:'fixed',left:'50%',bottom:'72px',transform:'translateX(-50%)',zIndex:'60',gap:'8px',direction:'rtl',flexWrap:'wrap',justifyContent:'center',maxWidth:'92vw'});document.body.appendChild(arControls);for(const b of arControls.querySelectorAll('button'))Object.assign(b.style,{padding:'10px 14px',borderRadius:'10px',border:'1px solid #ffffff44',background:'#101315dd',color:'#fff',fontWeight:'800',minWidth:'46px'});document.getElementById('arMinus').onclick=()=>setArScale(arScale-.05);document.getElementById('arPlus').onclick=()=>setArScale(arScale+.05);document.getElementById('arRotL').onclick=()=>setArYaw(arYaw-Math.PI/12);document.getElementById('arRotR').onclick=()=>setArYaw(arYaw+Math.PI/12);document.getElementById('arPlace').onclick=()=>{arPlaced=false;arReticle.visible=false;if(root)root.visible=false};function setArScale(v){arScale=THREE.MathUtils.clamp(v,.12,.9);if(root&&xrKind==='ar')root.scale.setScalar(arScale)}function setArYaw(v){arYaw=v;if(root&&xrKind==='ar')root.rotation.set(0,arYaw,0)}"
+          if old not in s: raise SystemExit('AR controls block not found')
+          s=s.replace(old,new,1)
+          s=s.replace("let arHitSource=null,arScale=.32,arPlaced=false;","let arHitSource=null,arScale=.32,arPlaced=false,arYaw=0;",1)
+
+          old="function xrSelect(controller){if(xrKind==='ar'){if(arReticle.visible&&root){const pos=new THREE.Vector3(),q=new THREE.Quaternion(),sc=new THREE.Vector3();arReticle.matrix.decompose(pos,q,sc);root.position.copy(pos);root.quaternion.copy(q);root.scale.setScalar(arScale);root.visible=true;arPlaced=true}return}if(xrKind!=='vr')return;if(vrPuzzle){const h=xrRayPick(controller);if(h){let o=h.object;while(o&&!o.userData.action)o=o.parent;o?.userData.action?.()}return}if(nearDoor())openVrPuzzle()}"
+          new="let xrSelectBusy=false;function xrSelect(controller){if(xrSelectBusy)return;xrSelectBusy=true;setTimeout(()=>xrSelectBusy=false,140);if(xrKind==='ar'){if(arReticle.visible&&root){const pos=new THREE.Vector3(),q=new THREE.Quaternion(),sc=new THREE.Vector3(),camPos=new THREE.Vector3();arReticle.matrix.decompose(pos,q,sc);xrCamera.getWorldPosition(camPos);arYaw=Math.atan2(camPos.x-pos.x,camPos.z-pos.z);root.position.copy(pos);root.rotation.set(0,arYaw,0);root.scale.setScalar(arScale);root.visible=true;arPlaced=true}return}if(xrKind!=='vr')return;if(vrPuzzle){const h=xrRayPick(controller);if(h){let o=h.object;while(o&&!o.userData.action)o=o.parent;o?.userData.action?.()}return}if(nearDoor())openVrPuzzle()}"
+          if old not in s: raise SystemExit('xrSelect block not found')
+          s=s.replace(old,new,1)
+
+          old="const rayGeo=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(0,0,-4)]),rayMat=new THREE.LineBasicMaterial({color:0x8fe8ff}),xrControllers=[];for(let i=0;i<2;i++){const c=renderer.xr.getController(i);xrControllers.push(c);const line=new THREE.Line(rayGeo,rayMat);c.add(line);c.addEventListener('selectstart',()=>xrSelect(c));xrRig.add(c)}"
+          new="const rayGeo=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(0,0,-4)]),rayMat=new THREE.LineBasicMaterial({color:0x8fe8ff}),xrControllers=[];for(let i=0;i<2;i++){const c=renderer.xr.getController(i);xrControllers.push(c);const line=new THREE.Line(rayGeo,rayMat);c.add(line);c.addEventListener('selectstart',()=>xrSelect(c));c.addEventListener('squeezestart',()=>{if(xrKind==='vr'&&vrPuzzle)closeVrPuzzle()});xrRig.add(c)}"
+          if old not in s: raise SystemExit('controller block not found')
+          s=s.replace(old,new,1)
+
+          old="if(xrKind==='ar'){const [,sy]=stickAxes(right?.gamepad||left?.gamepad);if(Math.abs(sy)>.18)setArScale(arScale-sy*dt*.28);return}if(xrKind!=='vr'||vrPuzzle)return;const [ax0,ay0]=stickAxes(left?.gamepad);"
+          new="if(xrKind==='ar'){const [sx,sy]=stickAxes(right?.gamepad||left?.gamepad);if(Math.abs(sy)>.18)setArScale(arScale-sy*dt*.28);if(arPlaced&&Math.abs(sx)>.18)setArYaw(arYaw+sx*dt*1.35);return}if(xrKind!=='vr')return;const [rx0]=stickAxes(right?.gamepad);if(Math.abs(rx0)<.35)snapReady=true;else if(snapReady){xrRig.rotation.y-=Math.sign(rx0)*Math.PI/6;snapReady=false}if(vrPuzzle)return;const [ax0,ay0]=stickAxes(left?.gamepad);"
+          if old not in s: raise SystemExit('xrMove AR/VR block not found')
+          s=s.replace(old,new,1)
+          old="const [rx]=stickAxes(right?.gamepad);if(Math.abs(rx)<.35)snapReady=true;else if(snapReady){xrRig.rotation.y-=Math.sign(rx)*Math.PI/6;snapReady=false}}"
+          if old in s: s=s.replace(old,"}",1)
+
+          # Hide flat DOM puzzle controls during immersive XR to prevent overlay lockups.
+          s=s.replace("document.body.classList.add('xr-active');player.visible=false;","document.body.classList.add('xr-active');player.visible=false;try{puzzles.close?.()}catch(e){};const ub=document.getElementById('use');if(ub)ub.style.display='none';",1)
+          s=s.replace("document.body.classList.remove('xr-active');scene.background=desktopBg;","document.body.classList.remove('xr-active');const ub=document.getElementById('use');if(ub)ub.style.display='';scene.background=desktopBg;",1)
+
+          p.write_text(s)
+          PY
+          node --check src/main.js
+          node --check src/puzzles.js
+      - name: Commit fixes
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/main.js
+          git commit -m "Improve AR rotation and Quest puzzle interaction"
+          git push
