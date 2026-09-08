@@ -14,24 +14,19 @@ jobs:
       - name: Download CC0 Modular Sci-Fi MegaKit
         run: |
           set -e
-          mkdir -p /tmp/q
+          mkdir -p /tmp/q/unpacked
           curl -L --fail --retry 3 "https://opengameart.org/sites/default/files/modular_scifi_megakitstandard.zip" -o /tmp/q/scifi.zip
           unzip -q /tmp/q/scifi.zip -d /tmp/q/unpacked
-          echo "Top-level contents:"
           find /tmp/q/unpacked -maxdepth 3 -type d | head -80
       - name: Copy glTF assets into repository
         run: |
           set -e
-          DEST="assets/vendor/quaternius-scifi"
+          DEST="$GITHUB_WORKSPACE/assets/vendor/quaternius-scifi"
           mkdir -p "$DEST"
           cd /tmp/q/unpacked
-          find . -type f \( -iname '*.gltf' -o -iname '*.glb' -o -iname '*.bin' -o -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) -print0 | xargs -0 -I{} cp --parents "{}" "$GITHUB_WORKSPACE/$DEST" || true
-          cat > "$GITHUB_WORKSPACE/$DEST/LICENSE.txt" <<'EOF'
-Modular Sci-Fi MegaKit by Quaternius
-License: CC0 1.0 Universal
-Source: https://opengameart.org/content/modular-sci-fi-megakit
-Imported for The Shelter project.
-EOF
+          find . -type f \( -iname '*.gltf' -o -iname '*.glb' -o -iname '*.bin' -o -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) -print0 | xargs -0 -I{} cp --parents "{}" "$DEST" || true
+          printf '%s\n' 'Modular Sci-Fi MegaKit by Quaternius' 'License: CC0 1.0 Universal' 'Source: https://opengameart.org/content/modular-sci-fi-megakit' 'Imported for The Shelter project.' > "$DEST/LICENSE.txt"
+          find "$DEST" -type f | head -120
       - name: Commit imported assets
         run: |
           set -e
