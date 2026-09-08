@@ -1,0 +1,66 @@
+name: Unique puzzles and shelter ending
+on:
+  push:
+    paths:
+      - '.github/workflows/unique-puzzles-ending.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replace repeated puzzles and add ending
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p=Path('src/puzzles.js')
+          s=p.read_text()
+          s=s.replace("export const types=['blocks','pipes','valves','circuit','jigsaw','pipes','blocks','circuit','blocks','valves'];","export const types=['blocks','pipes','valves','circuit','jigsaw','pressure','symbols','frequency','keypad','escape'];")
+          s=s.replace("const complete=()=>{const r=getRoom();if(solved[r])return;solved[r]=true;syncLamp();status.textContent='تم الحل — الباب مفتوح';status.className='status solved';onSolved(r,true);setTimeout(()=>{clean3D();modal.classList.remove('show');if(r<9)document.getElementById('next')?.click()},850)};", """const showEnding=()=>{let e=document.getElementById('ending');if(!e){e=document.createElement('div');e.id='ending';Object.assign(e.style,{position:'fixed',inset:'0',zIndex:'100',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',textAlign:'center',background:'linear-gradient(#8bb8d6,#e8d6ae)',color:'#182027',fontFamily:'system-ui',padding:'24px'});e.innerHTML='<div style=\"font-size:clamp(30px,7vw,64px);font-weight:900\">تم الخروج من العزل</div><div style=\"font-size:clamp(16px,3vw,26px);margin-top:12px\">فتحت بوابة السطح وخرجت من الملجأ بنجاح.</div><button id=restartGame style=\"margin-top:28px;padding:12px 20px;border:0;border-radius:10px;font-weight:800\">إعادة اللعب</button>';document.body.appendChild(e);document.getElementById('restartGame').onclick=()=>location.reload()}e.style.display='flex'};const complete=()=>{const r=getRoom();if(solved[r])return;solved[r]=true;syncLamp();status.textContent=r===9?'تم فتح بوابة السطح':'تم الحل — الباب مفتوح';status.className='status solved';onSolved(r,true);setTimeout(()=>{clean3D();modal.classList.remove('show');if(r<9)document.getElementById('next')?.click();else showEnding()},850)};""")
+
+          insert="""
+ function pressure(){let a=[0,0,0],target=[2,0,1];const draw=()=>stage((s,h)=>{a.forEach((v,i)=>{const g=new THREE.Group();g.userData.idx=i;g.position.x=(i-1)*2.3;const base=new THREE.Mesh(new THREE.BoxGeometry(1.2,2.6,.45),dark());base.userData.idx=i;g.add(base);const fill=new THREE.Mesh(new THREE.BoxGeometry(.55,.55+.55*v,.18),new THREE.MeshStandardMaterial({color:[0x4c85a6,0xf0b54a,0xff5b4f][v],emissive:[0x18364a,0x5c3a00,0x651a12][v],emissiveIntensity:1.8}));fill.position.y=-.7+(.55+.55*v)/2;fill.userData.idx=i;g.add(fill);const lamp=new THREE.Mesh(new THREE.SphereGeometry(.16,14,10),new THREE.MeshStandardMaterial({color:v===target[i]?0x49ff72:0xff4b43,emissive:v===target[i]?0x1cae45:0x8c1510,emissiveIntensity:3}));lamp.position.y=1;lamp.userData.idx=i;g.add(lamp);s.add(g);g.traverse(o=>{if(o.isMesh)h.push(o)})})},i=>{a[i]=(a[i]+1)%3;status.textContent='ضغط '+(i+1)+': '+a[i]+'/2';if(a.every((x,j)=>x===target[j])){complete();return}draw()});draw()}
+ function symbols(){let step=0,seq=[2,0,3,1],cols=[0x55c7ff,0xffcf55,0xff6b6b,0x7be37b];const draw=()=>stage((s,h)=>{for(let i=0;i<4;i++){const m=new THREE.Mesh(new THREE.BoxGeometry(1.35,1.35,.45),new THREE.MeshStandardMaterial({color:cols[i],emissive:step>0&&seq[step-1]===i?cols[i]:0x000000,emissiveIntensity:1.4,metalness:.2,roughness:.45}));m.position.x=(i-1.5)*1.75;m.userData.idx=i;s.add(m);h.push(m)}},i=>{if(i===seq[step]){step++;status.textContent='تسلسل الرموز: '+step+'/4';if(step===seq.length){complete();return}}else{step=0;status.textContent='تسلسل خاطئ — ابدأ من جديد'}draw()});draw()}
+ function frequency(){let a=[0,0,0],target=[3,1,4];const draw=()=>stage((s,h)=>{a.forEach((v,i)=>{const g=new THREE.Group();g.userData.idx=i;g.position.x=(i-1)*2.3;const dial=new THREE.Mesh(new THREE.CylinderGeometry(.72,.72,.28,28),metal());dial.rotation.x=Math.PI/2;dial.userData.idx=i;g.add(dial);const needle=new THREE.Mesh(new THREE.BoxGeometry(.12,.85,.16),new THREE.MeshStandardMaterial({color:0xffd257,emissive:0x6a4500,emissiveIntensity:2}));needle.position.y=.28;needle.rotation.z=(v-2)*.55;needle.userData.idx=i;g.add(needle);s.add(g);g.traverse(o=>{if(o.isMesh)h.push(o)})})},i=>{a[i]=(a[i]+1)%5;status.textContent='التردد '+(i+1)+': '+a[i]+'/4';if(a.every((x,j)=>x===target[j])){complete();return}draw()});draw()}
+ function keypad(){clean3D();let code='',target='7314';game.innerHTML='<div id=kp style=\"display:grid;grid-template-columns:repeat(3,76px);gap:8px;justify-content:center\"></div><div id=kpOut style=\"text-align:center;font-size:26px;letter-spacing:8px;margin-top:14px\">----</div>';const k=document.getElementById('kp'),out=document.getElementById('kpOut');[1,2,3,4,5,6,7,8,9,0].forEach(n=>{const b=document.createElement('button');b.textContent=n;b.style.cssText='height:64px;border-radius:10px;border:1px solid #ffffff33;background:#2b3035;color:white;font-size:24px;font-weight:800';b.onclick=()=>{code=(code+String(n)).slice(-4);out.textContent=code.padEnd(4,'-');if(code.length===4){if(code===target){complete()}else{status.textContent='رمز خاطئ';code='';setTimeout(()=>out.textContent='----',250)}}};k.appendChild(b)})}
+ function escapePuzzle(){clean3D();let step=0;const labels=['تشغيل طاقة المصعد','فتح قفل الأمان','فتح بوابة السطح'];game.innerHTML='<div id=esc style=\"display:flex;flex-direction:column;gap:12px;max-width:340px;margin:auto\"></div>';const e=document.getElementById('esc');labels.forEach((t,i)=>{const b=document.createElement('button');b.textContent=(i+1)+' · '+t;b.style.cssText='padding:18px;border-radius:12px;border:1px solid #ffffff33;background:#30363b;color:white;font-size:17px;font-weight:800';b.onclick=()=>{if(i===step){b.style.background='#24763d';b.disabled=true;step++;status.textContent='إجراء الخروج '+step+'/3';if(step===3)complete()}else status.textContent='نفّذ خطوات الخروج بالترتيب'};e.appendChild(b)})}
+"""
+          s=s.replace(" function jigsaw(){",insert+"\n function jigsaw(){",1)
+          s=s.replace("({blocks,pipes,valves,circuit,jigsaw}[t])()", "({blocks,pipes,valves,circuit,jigsaw,pressure,symbols,frequency,keypad,escape:escapePuzzle}[t])()")
+          s=s.replace("t==='circuit'?'حرّك مفاتيح الطاقة حتى تصل للوضع الصحيح.':'رتّب المكعبات المجسمة من 1 إلى 9.'", "t==='circuit'?'حرّك مفاتيح الطاقة حتى تصل للوضع الصحيح.':t==='pressure'?'اضبط مستويات الضغط الثلاثة.':t==='symbols'?'اضغط الرموز بالتسلسل الصحيح.':t==='frequency'?'اضبط ترددات أجهزة الاستقبال.':t==='keypad'?'أدخل رمز فتح بوابة النقل.':t==='escape'?'نفّذ إجراءات الخروج إلى السطح بالترتيب.':'رتّب المكعبات المجسمة من 1 إلى 9.'")
+          p.write_text(s)
+
+          p=Path('src/main.js')
+          s=p.read_text()
+          s=s.replace("const puzzles=bindPuzzles({getRoom:()=>roomIndex,onSolved:()=>syncUI(),canOpen:nearDoor});", "const puzzles=bindPuzzles({getRoom:()=>roomIndex,onSolved:()=>syncUI(),canOpen:nearDoor});")
+          s=s.replace("const vrTypes=['blocks','pipes','valves','circuit','jigsaw','pipes','blocks','circuit','blocks','valves'];", "const vrTypes=['blocks','pipes','valves','circuit','jigsaw','pressure','symbols','frequency','keypad','escape'];")
+          old="if(type==='blocks'||type==='jigsaw'){vrState.a=[1,2,3,4,5,6,7,8,9].sort(()=>Math.random()-.5);vrState.sel=-1;drawVrGrid()}else if(type==='pipes'){vrState.a=[0,1,3,2,1,0,2,3,0];drawVrPipes()}else if(type==='valves'){vrState.a=[0,0,0];vrState.target=[2,1,3];drawVrValves()}else{vrState.a=[0,0,0,0];vrState.target=roomIndex===7?[1,0,1,1]:[1,1,0,1];drawVrCircuit()}"
+          new="if(type==='blocks'||type==='jigsaw'){vrState.a=[1,2,3,4,5,6,7,8,9].sort(()=>Math.random()-.5);vrState.sel=-1;drawVrGrid()}else if(type==='pipes'){vrState.a=[0,1,3,2,1,0,2,3,0];drawVrPipes()}else if(type==='valves'){vrState.a=[0,0,0];vrState.target=[2,1,3];drawVrValves()}else if(type==='circuit'){vrState.a=[0,0,0,0];vrState.target=[1,1,0,1];drawVrCircuit()}else if(type==='pressure'){vrState.a=[0,0,0];vrState.target=[2,0,1];drawVrPressure()}else if(type==='symbols'){vrState.step=0;vrState.seq=[2,0,3,1];drawVrSymbols()}else if(type==='frequency'){vrState.a=[0,0,0];vrState.target=[3,1,4];drawVrFrequency()}else if(type==='keypad'){vrState.code='';drawVrKeypad()}else{vrState.step=0;drawVrEscape()}"
+          if old not in s: raise SystemExit('openVrPuzzle dispatch not found')
+          s=s.replace(old,new,1)
+          anchor="function drawVrCircuit(){"
+          idx=s.find(anchor)
+          if idx<0: raise SystemExit('drawVrCircuit not found')
+          extra="""function drawVrPressure(){clearVrItems();vrState.a.forEach((v,i)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(.55,.8,.14),vrText('P'+(i+1)+':'+v,420,240));m.position.set((i-1)*.7,-.08,.05);m.userData={item:true,action:()=>{vrState.a[i]=(vrState.a[i]+1)%3;if(vrState.a.every((x,j)=>x===vrState.target[j])){vrFinish();return}drawVrPressure()}};vrPuzzle.add(m);vrHits.push(m)})}
+function drawVrSymbols(){clearVrItems();['A','B','C','D'].forEach((v,i)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(.5,.5,.12),vrText(v,300,300));m.position.set((i-1.5)*.58,-.08,.05);m.userData={item:true,action:()=>{if(i===vrState.seq[vrState.step]){vrState.step++;if(vrState.step===4){vrFinish();return}}else vrState.step=0;drawVrSymbols()}};vrPuzzle.add(m);vrHits.push(m)})}
+function drawVrFrequency(){clearVrItems();vrState.a.forEach((v,i)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(.6,.8,.14),vrText('F'+(i+1)+':'+v,420,240));m.position.set((i-1)*.72,-.08,.05);m.userData={item:true,action:()=>{vrState.a[i]=(vrState.a[i]+1)%5;if(vrState.a.every((x,j)=>x===vrState.target[j])){vrFinish();return}drawVrFrequency()}};vrPuzzle.add(m);vrHits.push(m)})}
+function drawVrKeypad(){clearVrItems();[1,2,3,4,5,6,7,8,9,0].forEach((n,i)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(.38,.32,.1),vrText(String(n),220,220));m.position.set(((i%5)-2)*.43,.18-Math.floor(i/5)*.42,.05);m.userData={item:true,action:()=>{vrState.code=(vrState.code+String(n)).slice(-4);if(vrState.code.length===4){if(vrState.code==='7314'){vrFinish();return}vrState.code=''}drawVrKeypad()}};vrPuzzle.add(m);vrHits.push(m)})}
+function drawVrEscape(){clearVrItems();['POWER','LOCK','HATCH'].forEach((t,i)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(1.55,.38,.12),vrText(t,500,180));m.position.set(0,.3-i*.48,.05);m.userData={item:true,action:()=>{if(i===vrState.step){vrState.step++;if(vrState.step===3){vrFinish();return}drawVrEscape()}}};vrPuzzle.add(m);vrHits.push(m)})}
+"""
+          s=s[:idx]+extra+s[idx:]
+          p.write_text(s)
+          PY
+      - name: Verify syntax
+        run: |
+          node --check src/main.js
+          node --check src/puzzles.js
+      - name: Commit game changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main.js src/puzzles.js
+          git commit -m "Give every shelter room a unique puzzle and add final escape ending" || exit 0
+          git push
