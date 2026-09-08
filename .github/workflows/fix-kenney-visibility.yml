@@ -1,0 +1,70 @@
+name: Fix Kenney Character
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-kenney-visibility.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch character loader
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          start=s.index("const fbxLoader=new FBXLoader();")
+          end=s.index("const keys={up:false", start)
+          block="""const fbxLoader=new FBXLoader();
+          Promise.all([
+            fbxLoader.loadAsync('./assets/kenney/characterMedium.fbx'),
+            fbxLoader.loadAsync('./assets/kenney/idle.fbx'),
+            fbxLoader.loadAsync('./assets/kenney/run.fbx'),
+            new THREE.TextureLoader().loadAsync('./assets/kenney/humanMaleA.png')
+          ]).then(([obj,idleFbx,runFbx,tex])=>{
+            tex.colorSpace=THREE.SRGBColorSpace;
+            tex.flipY=true;
+            tex.magFilter=THREE.NearestFilter;
+            tex.minFilter=THREE.NearestMipmapLinearFilter;
+            obj.updateMatrixWorld(true);
+            let b=new THREE.Box3().setFromObject(obj),size=b.getSize(new THREE.Vector3());
+            const scale=2.25/Math.max(size.y,.001);
+            obj.scale.setScalar(scale);
+            obj.updateMatrixWorld(true);
+            b=new THREE.Box3().setFromObject(obj);
+            const center=b.getCenter(new THREE.Vector3());
+            obj.position.x-=center.x;
+            obj.position.y-=b.min.y;
+            obj.position.z-=center.z;
+            obj.traverse(o=>{
+              if(o.isMesh){
+                o.visible=true;o.frustumCulled=false;o.castShadow=true;o.receiveShadow=true;
+                o.material=new THREE.MeshStandardMaterial({map:tex,color:0xffffff,roughness:.82,metalness:0,side:THREE.DoubleSide,transparent:false,opacity:1,depthWrite:true});
+              }
+            });
+            player.clear();model=obj;player.add(model);walkParts=null;modelBaseY=model.position.y;
+            mixer=new THREE.AnimationMixer(model);
+            if(idleFbx.animations[0]){idleAction=mixer.clipAction(idleFbx.animations[0],model);idleAction.setLoop(THREE.LoopRepeat,Infinity);idleAction.play();currentAction=idleAction}
+            if(runFbx.animations[0]){runAction=mixer.clipAction(runFbx.animations[0],model);runAction.setLoop(THREE.LoopRepeat,Infinity);runAction.timeScale=.72}
+          }).catch(err=>console.error('Kenney character load failed',err));
+          """
+          s=s[:start]+block+s[end:]
+          s=s.replace("if(model){model.position.y=modelBaseY+doubleStep*.045;model.rotation.z=THREE.MathUtils.lerp(model.rotation.z,-step*.025,1-Math.exp(-10*dt));model.rotation.x=THREE.MathUtils.lerp(model.rotation.x,.025+doubleStep*.012,1-Math.exp(-10*dt))}","if(model&&!mixer){model.position.y=modelBaseY+doubleStep*.045;model.rotation.z=THREE.MathUtils.lerp(model.rotation.z,-step*.025,1-Math.exp(-10*dt));model.rotation.x=THREE.MathUtils.lerp(model.rotation.x,.025+doubleStep*.012,1-Math.exp(-10*dt))}")
+          s=s.replace("else if(model){model.position.y=THREE.MathUtils.lerp(model.position.y,modelBaseY,1-Math.exp(-10*dt));model.rotation.z=THREE.MathUtils.lerp(model.rotation.z,0,1-Math.exp(-10*dt));model.rotation.x=THREE.MathUtils.lerp(model.rotation.x,0,1-Math.exp(-10*dt));if(walkParts){walkParts.l1.rotation.x*=.8;walkParts.l2.rotation.x*=.8;walkParts.a1.rotation.x*=.8;walkParts.a2.rotation.x*=.8}}","else if(model&&!mixer){model.position.y=THREE.MathUtils.lerp(model.position.y,modelBaseY,1-Math.exp(-10*dt));model.rotation.z=THREE.MathUtils.lerp(model.rotation.z,0,1-Math.exp(-10*dt));model.rotation.x=THREE.MathUtils.lerp(model.rotation.x,0,1-Math.exp(-10*dt));if(walkParts){walkParts.l1.rotation.x*=.8;walkParts.l2.rotation.x*=.8;walkParts.a1.rotation.x*=.8;walkParts.a2.rotation.x*=.8}}")
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Fix Kenney character rendering and animation playback'
+          git push
