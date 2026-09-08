@@ -39,3 +39,4 @@ jobs:
           fi
           git commit -m "Import Quaternius CC0 sci-fi assets"
           git push
+# trigger: 2026-09-08
