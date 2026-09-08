@@ -1,6 +1,9 @@
 name: Import Quaternius Sci-Fi Assets
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/import-quaternius-scifi.yml'
 permissions:
   contents: write
 jobs:
@@ -21,22 +24,14 @@ jobs:
           set -e
           DEST="assets/vendor/quaternius-scifi"
           mkdir -p "$DEST"
-          find /tmp/q/unpacked -type f \( -iname '*.gltf' -o -iname '*.glb' -o -iname '*.bin' -o -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) -print0 | xargs -0 -I{} cp --parents "{}" "$DEST" || true
-          find "$DEST" -type f | sed 's#^#IMPORTED #'
-          cat > "$DEST/LICENSE.txt" <<'EOF'
+          cd /tmp/q/unpacked
+          find . -type f \( -iname '*.gltf' -o -iname '*.glb' -o -iname '*.bin' -o -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) -print0 | xargs -0 -I{} cp --parents "{}" "$GITHUB_WORKSPACE/$DEST" || true
+          cat > "$GITHUB_WORKSPACE/$DEST/LICENSE.txt" <<'EOF'
 Modular Sci-Fi MegaKit by Quaternius
 License: CC0 1.0 Universal
 Source: https://opengameart.org/content/modular-sci-fi-megakit
 Imported for The Shelter project.
 EOF
-      - name: Flatten temporary path prefix
-        run: |
-          set -e
-          DEST="assets/vendor/quaternius-scifi"
-          if [ -d "$DEST/tmp/q/unpacked" ]; then
-            cp -a "$DEST/tmp/q/unpacked/." "$DEST/"
-            rm -rf "$DEST/tmp"
-          fi
       - name: Commit imported assets
         run: |
           set -e
