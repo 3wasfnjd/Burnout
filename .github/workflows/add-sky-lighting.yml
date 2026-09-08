@@ -17,8 +17,7 @@ jobs:
           p=Path('src/main.js')
           s=p.read_text()
           old="const scene=new THREE.Scene();scene.background=new THREE.Color(0x050606);scene.fog=new THREE.Fog(0x050606,22,48);"
-          new="""const scene=new THREE.Scene();
-const skyCanvas=document.createElement('canvas');skyCanvas.width=skyCanvas.height=512;const skyCtx=skyCanvas.getContext('2d'),skyGrad=skyCtx.createLinearGradient(0,0,0,512);skyGrad.addColorStop(0,'#6f8fa8');skyGrad.addColorStop(.5,'#a7b7bf');skyGrad.addColorStop(1,'#d5c2a6');skyCtx.fillStyle=skyGrad;skyCtx.fillRect(0,0,512,512);const skyTexture=new THREE.CanvasTexture(skyCanvas);skyTexture.colorSpace=THREE.SRGBColorSpace;scene.background=skyTexture;scene.fog=new THREE.Fog(0x9aa8ad,28,62);"""
+          new="const scene=new THREE.Scene();const skyCanvas=document.createElement('canvas');skyCanvas.width=skyCanvas.height=512;const skyCtx=skyCanvas.getContext('2d'),skyGrad=skyCtx.createLinearGradient(0,0,0,512);skyGrad.addColorStop(0,'#6f8fa8');skyGrad.addColorStop(.5,'#a7b7bf');skyGrad.addColorStop(1,'#d5c2a6');skyCtx.fillStyle=skyGrad;skyCtx.fillRect(0,0,512,512);const skyTexture=new THREE.CanvasTexture(skyCanvas);skyTexture.colorSpace=THREE.SRGBColorSpace;scene.background=skyTexture;scene.fog=new THREE.Fog(0x9aa8ad,28,62);"
           if old not in s: raise SystemExit('scene background block not found')
           s=s.replace(old,new,1)
           old="renderer.toneMappingExposure=1.42;"
