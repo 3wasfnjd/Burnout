@@ -1,0 +1,48 @@
+name: Fix character overlap and run
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-character-overlap-run.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch character logic
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+
+          old_run="if(runFbx.animations[0]){const runClip=SkeletonUtils.retargetClip(model,runFbx,runFbx.animations[0],{hip:'Hips',preservePosition:false,preserveHipPosition:true,useFirstFramePosition:false});runAction=mixer.clipAction(runClip,model);runAction.setLoop(THREE.LoopRepeat,Infinity);runAction.timeScale=.72}"
+          new_run="if(runFbx.animations[0]){const src=runFbx.animations[0];const lowerTracks=src.tracks.filter(t=>/(hip|leg|foot|toe)/i.test(t.name));const runClip=new THREE.AnimationClip('runLowerBody',src.duration,lowerTracks);runAction=mixer.clipAction(runClip,model);runAction.setLoop(THREE.LoopRepeat,Infinity);runAction.timeScale=.72}"
+          if old_run not in s:
+              raise SystemExit('run retarget block not found')
+          s=s.replace(old_run,new_run,1)
+
+          old_catch="}).catch(err=>{console.error('Kenney character load failed',err);fallbackBoy()});"
+          new_catch="}).catch(err=>{console.error('Kenney character load failed',err);if(!model){player.clear();fallbackBoy()}});"
+          if old_catch not in s:
+              raise SystemExit('catch block not found')
+          s=s.replace(old_catch,new_catch,1)
+
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then
+            echo 'No changes'
+          else
+            git commit -m 'Fix character overlap and lower-body run animation'
+            git push
+          fi
