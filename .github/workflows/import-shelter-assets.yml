@@ -1,5 +1,8 @@
 name: Import Shelter Art Assets
 on:
+  push:
+    paths:
+      - '.github/workflows/import-shelter-assets.yml'
   workflow_dispatch:
 permissions:
   contents: write
@@ -12,17 +15,18 @@ jobs:
         run: |
           set -e
           mkdir -p assets/vendor downloads
-          curl -L --fail 'https://kenney.nl/media/pages/assets/furniture-kit/5b45f5d91b-1677663581/kenney_furniture-kit.zip' -o downloads/furniture.zip || true
-          curl -L --fail 'https://kenney.nl/media/pages/assets/ui-pack-sci-fi/2c3e4500d9-1726062442/kenney_ui-pack-sci-fi.zip' -o downloads/ui.zip || true
-          if [ -s downloads/furniture.zip ]; then mkdir -p assets/vendor/kenney-furniture && unzip -oq downloads/furniture.zip -d assets/vendor/kenney-furniture; fi
-          if [ -s downloads/ui.zip ]; then mkdir -p assets/vendor/kenney-ui-scifi && unzip -oq downloads/ui.zip -d assets/vendor/kenney-ui-scifi; fi
+          curl -L --fail 'https://kenney.nl/media/pages/assets/furniture-kit/5b45f5d91b-1677663581/kenney_furniture-kit.zip' -o downloads/furniture.zip
+          curl -L --fail 'https://kenney.nl/media/pages/assets/ui-pack-sci-fi/2c3e4500d9-1726062442/kenney_ui-pack-sci-fi.zip' -o downloads/ui.zip
+          mkdir -p assets/vendor/kenney-furniture assets/vendor/kenney-ui-scifi
+          unzip -oq downloads/furniture.zip -d assets/vendor/kenney-furniture
+          unzip -oq downloads/ui.zip -d assets/vendor/kenney-ui-scifi
       - name: Record provenance
         run: |
           cat > assets/vendor/ASSET-SOURCES.md <<'EOF'
           # Shelter asset sources
           - Kenney Furniture Kit — CC0: https://kenney.nl/assets/furniture-kit
           - Kenney UI Pack Sci-Fi — CC0: https://kenney.nl/assets/ui-pack-sci-fi
-          - Quaternius Modular Sci-Fi Megakit — CC0 candidate for next environment pass: https://quaternius.com/packs/modularscifimegakit.html
+          - Quaternius Modular Sci-Fi Megakit — CC0 candidate: https://quaternius.com/packs/modularscifimegakit.html
           EOF
       - name: Commit imported assets
         run: |
