@@ -1,0 +1,20 @@
+name: Run valve fix
+on:
+  push:
+    paths:
+      - 'scripts/fix_valves.py'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/fix_valves.py
+      - run: node --check src/main.js && node --check src/puzzles.js
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/main.js src/puzzles.js
+          git commit -m 'Fix visible feedback for room 3 valves' || exit 0
+          git push
