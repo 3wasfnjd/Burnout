@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>The Shelter — غرفة تجريبية</title>
+  <style>
+    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#161915;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}canvas{display:block}
+    #hud{position:fixed;inset:0;pointer-events:none;color:#f4eedf;text-shadow:0 2px 8px #0008}
+    .title{position:absolute;top:18px;right:22px;background:#181d18bb;border:1px solid #ffffff22;border-radius:18px;padding:12px 16px;backdrop-filter:blur(10px)}
+    .title b{display:block;font-size:18px}.title span{font-size:12px;color:#d8d0bc}
+    #hint{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);padding:10px 16px;border-radius:999px;background:#181d18d9;border:1px solid #ffffff24;font-size:13px;white-space:nowrap;transition:.25s}
+    #interact{position:absolute;left:50%;top:56%;transform:translate(-50%,-50%) scale(.96);opacity:0;padding:12px 18px;border-radius:16px;background:#ead3a3;color:#2b281f;text-shadow:none;font-weight:700;transition:.2s}
+    #interact.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+    #mobile{position:absolute;left:18px;right:18px;bottom:18px;display:flex;justify-content:space-between;align-items:flex-end}
+    .pad,.action{pointer-events:auto;display:flex;gap:10px}.btn{width:58px;height:58px;border-radius:50%;border:1px solid #ffffff33;background:#222820b8;color:#fff;font-size:22px;display:grid;place-items:center;backdrop-filter:blur(8px);touch-action:none}.action .btn{width:68px;height:68px;font-size:14px;background:#7a6847cc}
+    #modal{position:fixed;inset:0;display:none;place-items:center;background:#0c0d0bc9;z-index:10;padding:22px}.card{width:min(430px,92vw);background:#e8dfca;color:#29271f;border-radius:26px;padding:24px;box-shadow:0 28px 80px #0009;text-align:center}.card h2{margin:0 0 8px}.symbols{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0}.sym{border:0;border-radius:18px;padding:18px 0;font-size:24px;background:#cfc5ad;color:#302d25}.sym:active{transform:scale(.97)}#msg{min-height:24px;color:#705b3e;font-weight:700}.close{border:0;border-radius:14px;padding:10px 18px;background:#34372f;color:#fff;font-weight:700}
+    @media(min-width:900px){#mobile{display:none}}
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div class="title"><b>THE SHELTER</b><span>غرفة واحدة — نموذج بصري تفاعلي</span></div>
+    <div id="interact">اضغط E لفتح لوحة التحكم</div>
+    <div id="hint">تحرك بـ A / D أو الأسهم — اقترب من لوحة الباب</div>
+    <div id="mobile"><div class="pad"><button class="btn" data-key="left">◀</button><button class="btn" data-key="right">▶</button></div><div class="action"><button class="btn" id="useBtn">تفاعل</button></div></div>
+  </div>
+  <div id="modal"><div class="card"><h2>لوحة الطوارئ</h2><p>اختر الرموز بالترتيب الصحيح لفتح الباب.</p><div class="symbols"><button class="sym" data-v="1">●</button><button class="sym" data-v="2">▲</button><button class="sym" data-v="3">■</button></div><div id="msg">الترتيب محفور قرب الأنبوب: ▲ ● ■</div><br><button class="close" id="closeBtn">إغلاق</button></div></div>
+
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"}}</script>
+  <script type="module">
+    import * as THREE from 'three';
+
+    const scene=new THREE.Scene();
+    scene.background=new THREE.Color(0x9aa68d);
+    scene.fog=new THREE.Fog(0x9aa68d,24,48);
+
+    const camera=new THREE.PerspectiveCamera(34,innerWidth/innerHeight,.1,100);
+    camera.position.set(10,8.5,15);
+    camera.lookAt(0,2.2,0);
+
+    const renderer=new THREE.WebGLRenderer({antialias:true});
+    renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);
+    renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;
+    document.body.prepend(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight(0xd8e0c8,0x383329,2.4));
+    const sun=new THREE.DirectionalLight(0xffe7bd,3.2);sun.position.set(7,11,7);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-14;sun.shadow.camera.right=14;sun.shadow.camera.top=12;sun.shadow.camera.bottom=-8;scene.add(sun);
+
+    const mats={
+      wall:new THREE.MeshStandardMaterial({color:0x6f705f,roughness:.95,metalness:0}),
+      wall2:new THREE.MeshStandardMaterial({color:0x7d7b67,roughness:1}),
+      floor:new THREE.MeshStandardMaterial({color:0x504d43,roughness:1}),
+      trim:new THREE.MeshStandardMaterial({color:0x363a34,roughness:.75}),
+      wood:new THREE.MeshStandardMaterial({color:0x765d3d,roughness:.95}),
+      rust:new THREE.MeshStandardMaterial({color:0x6d4e32,roughness:1}),
+      metal:new THREE.MeshStandardMaterial({color:0x565d58,roughness:.7,metalness:.2}),
+      accent:new THREE.MeshStandardMaterial({color:0xb68c50,roughness:.8}),
+      cloth:new THREE.MeshStandardMaterial({color:0x7b684e,roughness:1}),
+      lamp:new THREE.MeshStandardMaterial({color:0xffdd98,emissive:0xffc96f,emissiveIntensity:2.4}),
+      skin:new THREE.MeshStandardMaterial({color:0xb98d67,roughness:1}),
+      suit:new THREE.MeshStandardMaterial({color:0x4f584e,roughness:1}),
+      dark:new THREE.MeshStandardMaterial({color:0x242722,roughness:1})
+    };
+    const box=(w,h,d,mat,x,y,z,ry=0)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);m.rotation.y=ry;m.castShadow=m.receiveShadow=true;scene.add(m);return m};
+    const cyl=(r,h,mat,x,y,z,rotZ=Math.PI/2)=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,12),mat);m.position.set(x,y,z);m.rotation.z=rotZ;m.castShadow=m.receiveShadow=true;scene.add(m);return m};
+
+    // Cutaway room: open front, thick back and side walls.
+    box(16,.55,8,mats.floor,0,-.28,0);
+    box(16,5.4,.5,mats.wall,0,2.4,-3.75);
+    box(.5,5.4,8,mats.wall2,-7.75,2.4,0);
+    box(.5,5.4,8,mats.wall2,7.75,2.4,0);
+    box(16,.35,.7,mats.trim,0,5.05,-3.6);
+    // hand-built edge trims
+    box(16,.16,.18,mats.trim,0,.12,-3.48);box(.18,5,0.18,mats.trim,-7.46,2.4,-3.48);box(.18,5,.18,mats.trim,7.46,2.4,-3.48);
+
+    // Door and control panel
+    const door=box(2.15,3.5,.28,mats.metal,5.35,1.5,-3.42);
+    box(2.55,.22,.38,mats.trim,5.35,3.35,-3.4);box(.22,3.9,.38,mats.trim,4.18,1.55,-3.4);box(.22,3.9,.38,mats.trim,6.52,1.55,-3.4);
+    const panel=box(.72,1.0,.25,mats.accent,3.85,1.65,-3.24);panel.name='panel';
+    for(let i=0;i<3;i++) box(.12,.12,.08,mats.lamp,3.67+i*.18,1.72,-3.08);
+
+    // Work table + scattered props
+    box(3.0,.25,1.25,mats.wood,-2.5,1.1,-2.55);box(.22,1.1,.22,mats.rust,-3.72,.5,-2.94);box(.22,1.1,.22,mats.rust,-1.28,.5,-2.94);
+    box(.7,.55,.75,mats.metal,-3.25,1.48,-2.55);box(.42,.18,.56,mats.dark,-1.9,1.38,-2.55,0.2);
+    // shelving
+    box(2.6,.16,.7,mats.wood,-5.55,1.1,-3.05);box(2.6,.16,.7,mats.wood,-5.55,2.2,-3.05);box(.15,2.4,.15,mats.rust,-6.7,1.15,-3.05);box(.15,2.4,.15,mats.rust,-4.4,1.15,-3.05);
+    box(.55,.55,.55,mats.cloth,-6.1,1.46,-2.9);box(.5,.35,.5,mats.accent,-5.25,2.45,-2.9);
+
+    // pipes across back wall
+    cyl(.18,8.8,mats.rust,-.6,4.25,-3.35);cyl(.11,5.3,mats.metal,-2.5,3.72,-3.25);cyl(.11,4.0,mats.metal,2.6,4.0,-3.25);
+    // pipe vertical bends hinted with vertical cylinders
+    const vp=(r,h,mat,x,y,z)=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,12),mat);m.position.set(x,y,z);m.castShadow=true;scene.add(m)};
+    vp(.18,2.1,mats.rust,-5.0,3.2,-3.35);vp(.11,1.3,mats.metal,.05,3.2,-3.25);
+
+    // Hanging lamp
+    vp(.035,1.3,mats.dark,.4,4.45,-.5);const shade=new THREE.Mesh(new THREE.ConeGeometry(.48,.34,12,1,true),mats.metal);shade.position.set(.4,3.78,-.5);shade.rotation.x=Math.PI;shade.castShadow=true;scene.add(shade);const bulb=new THREE.Mesh(new THREE.SphereGeometry(.14,12,8),mats.lamp);bulb.position.set(.4,3.58,-.5);scene.add(bulb);const point=new THREE.PointLight(0xffc86f,14,8,2);point.position.copy(bulb.position);point.castShadow=true;scene.add(point);
+
+    // rug and debris to make the scene feel illustrated, not sterile
+    box(3.8,.035,2.1,new THREE.MeshStandardMaterial({color:0x66553f,roughness:1}),.4,.02,.6,-.05);
+    for(let i=0;i<15;i++){const s=.08+Math.random()*.13;const rock=new THREE.Mesh(new THREE.DodecahedronGeometry(s,0),mats.dark);rock.position.set(-6+Math.random()*12,.08,1.6+Math.random()*1.4);rock.rotation.set(Math.random(),Math.random(),Math.random());rock.castShadow=true;scene.add(rock)}
+
+    // Character assembled from low-poly primitives.
+    const player=new THREE.Group();scene.add(player);player.position.set(-.5,0,.9);
+    const body=new THREE.Mesh(new THREE.CapsuleGeometry(.33,.72,4,8),mats.suit);body.position.y=1.08;body.castShadow=true;player.add(body);
+    const head=new THREE.Mesh(new THREE.SphereGeometry(.3,10,7),mats.skin);head.position.y=1.92;head.scale.y=1.08;head.castShadow=true;player.add(head);
+    const hair=new THREE.Mesh(new THREE.SphereGeometry(.305,10,6,0,Math.PI*2,0,Math.PI*.48),mats.dark);hair.position.y=2.05;hair.castShadow=true;player.add(hair);
+    const legL=box(.19,.7,.22,mats.dark,0,0,0),legR=box(.19,.7,.22,mats.dark,0,0,0);scene.remove(legL,legR);legL.position.set(-.17,.38,0);legR.position.set(.17,.38,0);player.add(legL,legR);
+    const armL=new THREE.Mesh(new THREE.CapsuleGeometry(.1,.52,3,6),mats.suit),armR=armL.clone();armL.position.set(-.43,1.15,0);armR.position.set(.43,1.15,0);player.add(armL,armR);
+    player.traverse(o=>{if(o.isMesh)o.castShadow=true});
+
+    const keys={left:false,right:false};let unlocked=false;let puzzle=[];let near=false;
+    const interact=document.getElementById('interact'),modal=document.getElementById('modal'),msg=document.getElementById('msg');
+    addEventListener('keydown',e=>{if(['ArrowLeft','a','A'].includes(e.key))keys.left=true;if(['ArrowRight','d','D'].includes(e.key))keys.right=true;if((e.key==='e'||e.key==='E'||e.key==='Enter')&&near)openPuzzle();});
+    addEventListener('keyup',e=>{if(['ArrowLeft','a','A'].includes(e.key))keys.left=false;if(['ArrowRight','d','D'].includes(e.key))keys.right=false;});
+    document.querySelectorAll('[data-key]').forEach(b=>{const k=b.dataset.key;const down=e=>{e.preventDefault();keys[k]=true},up=e=>{e.preventDefault();keys[k]=false};b.addEventListener('pointerdown',down);b.addEventListener('pointerup',up);b.addEventListener('pointercancel',up);b.addEventListener('pointerleave',up)});
+    document.getElementById('useBtn').onclick=()=>{if(near)openPuzzle()};document.getElementById('closeBtn').onclick=()=>modal.style.display='none';
+    document.querySelectorAll('.sym').forEach(b=>b.onclick=()=>{puzzle.push(Number(b.dataset.v));if(puzzle.length===3){if(puzzle.join('')==='213'){unlocked=true;msg.textContent='تم فتح الباب.';door.material=new THREE.MeshStandardMaterial({color:0x6c795f,roughness:.75});setTimeout(()=>modal.style.display='none',700)}else{msg.textContent='ترتيب غير صحيح — حاول مرة أخرى.';}puzzle=[]}});
+    function openPuzzle(){if(unlocked){msg.textContent='الباب مفتوح بالفعل.';}else msg.textContent='الترتيب محفور قرب الأنبوب: ▲ ● ■';modal.style.display='grid'}
+
+    const clock=new THREE.Clock();
+    function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.033);let dir=0;if(keys.left)dir-=1;if(keys.right)dir+=1;if(dir){player.position.x=THREE.MathUtils.clamp(player.position.x+dir*3.1*dt,-6.7,6.2);player.rotation.y=dir>0?Math.PI/2:-Math.PI/2;const walk=performance.now()*.012;legL.rotation.x=Math.sin(walk)*.45;legR.rotation.x=-Math.sin(walk)*.45;armL.rotation.x=-Math.sin(walk)*.35;armR.rotation.x=Math.sin(walk)*.35}else{legL.rotation.x*=.8;legR.rotation.x*=.8;armL.rotation.x*=.8;armR.rotation.x*=.8}
+      near=Math.abs(player.position.x-3.85)<1.25;interact.classList.toggle('show',near);if(unlocked){door.position.y=Math.min(4.9,door.position.y+dt*1.8)}
+      camera.position.x=THREE.MathUtils.lerp(camera.position.x,player.position.x*.22+9.2,.025);camera.lookAt(player.position.x*.18,2.05,-.3);renderer.render(scene,camera)}animate();
+    addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+  </script>
+</body>
+</html>
