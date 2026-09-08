@@ -37,15 +37,57 @@ jobs:
           cp '/tmp/kenney/Skins/humanMaleA.png' assets/kenney/humanMaleA.png
           cp '/tmp/kenney/License.txt' assets/kenney/License.txt
 
-      - name: Commit imported assets
+      - name: Patch the game to use the animated FBX character
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+
+          s = s.replace(
+              "import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';",
+              "import {FBXLoader} from 'three/addons/loaders/FBXLoader.js';"
+          )
+
+          old = """const player=new THREE.Group();player.position.set(-.25,.12,.55);scene.add(player);let model=null,walkParts=null;let modelBaseY=0;
+          function fallbackBoy(){const g=new THREE.Group();const torso=new THREE.Mesh(new THREE.CapsuleGeometry(.34,.72,4,8),M.red);torso.position.y=1.13;g.add(torso);const head=new THREE.Mesh(new THREE.SphereGeometry(.31,12,8),M.skin);head.position.y=1.96;g.add(head);const hair=new THREE.Mesh(new THREE.SphereGeometry(.32,10,7,0,Math.PI*2,0,Math.PI*.52),M.hair);hair.position.y=2.09;g.add(hair);const l1=new THREE.Mesh(new THREE.BoxGeometry(.2,.72,.24),M.dark),l2=l1.clone();l1.position.set(-.17,.39,0);l2.position.set(.17,.39,0);g.add(l1,l2);const a1=new THREE.Mesh(new THREE.CapsuleGeometry(.1,.5,3,6),M.skin),a2=a1.clone();a1.position.set(-.44,1.14,0);a2.position.set(.44,1.14,0);g.add(a1,a2);const backpack=new THREE.Mesh(new THREE.BoxGeometry(.55,.7,.3),M.wood);backpack.position.set(0,1.22,.26);g.add(backpack);g.traverse(o=>{if(o.isMesh)o.castShadow=true});player.add(g);model=g;walkParts={l1,l2,a1,a2};modelBaseY=0}
+          fallbackBoy();
+          new GLTFLoader().load('./character.glb',g=>{player.clear();model=g.scene;const b=new THREE.Box3().setFromObject(model),size=b.getSize(new THREE.Vector3()),center=b.getCenter(new THREE.Vector3());const scale=2.25/Math.max(size.y,.001);model.scale.setScalar(scale);model.position.set(-center.x*scale,-b.min.y*scale,-center.z*scale);model.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}});player.add(model);walkParts=null;modelBaseY=model.position.y},undefined,()=>{});"""
+
+          new = """const player=new THREE.Group();player.position.set(-.25,.12,.55);scene.add(player);let model=null,walkParts=null;let modelBaseY=0;let mixer=null,idleAction=null,runAction=null,currentAction=null;
+          function fallbackBoy(){const g=new THREE.Group();const torso=new THREE.Mesh(new THREE.CapsuleGeometry(.34,.72,4,8),M.red);torso.position.y=1.13;g.add(torso);const head=new THREE.Mesh(new THREE.SphereGeometry(.31,12,8),M.skin);head.position.y=1.96;g.add(head);const hair=new THREE.Mesh(new THREE.SphereGeometry(.32,10,7,0,Math.PI*2,0,Math.PI*.52),M.hair);hair.position.y=2.09;g.add(hair);const l1=new THREE.Mesh(new THREE.BoxGeometry(.2,.72,.24),M.dark),l2=l1.clone();l1.position.set(-.17,.39,0);l2.position.set(.17,.39,0);g.add(l1,l2);const a1=new THREE.Mesh(new THREE.CapsuleGeometry(.1,.5,3,6),M.skin),a2=a1.clone();a1.position.set(-.44,1.14,0);a2.position.set(.44,1.14,0);g.add(a1,a2);const backpack=new THREE.Mesh(new THREE.BoxGeometry(.55,.7,.3),M.wood);backpack.position.set(0,1.22,.26);g.add(backpack);g.traverse(o=>{if(o.isMesh)o.castShadow=true});player.add(g);model=g;walkParts={l1,l2,a1,a2};modelBaseY=0}
+          function setCharacterAction(moving){const next=moving?runAction:idleAction;if(!next||next===currentAction)return;if(currentAction)currentAction.fadeOut(.18);next.reset().fadeIn(.18).play();currentAction=next}
+          fallbackBoy();
+          const fbxLoader=new FBXLoader();
+          fbxLoader.load('./assets/kenney/characterMedium.fbx',obj=>{player.clear();model=obj;const b=new THREE.Box3().setFromObject(model),size=b.getSize(new THREE.Vector3());const scale=2.25/Math.max(size.y,.001);model.scale.setScalar(scale);const b2=new THREE.Box3().setFromObject(model),center=b2.getCenter(new THREE.Vector3());model.position.set(-center.x,-b2.min.y,-center.z);model.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;if(o.material){o.material=o.material.clone();o.material.roughness=.9}}});new THREE.TextureLoader().load('./assets/kenney/humanMaleA.png',tex=>{tex.colorSpace=THREE.SRGBColorSpace;tex.flipY=false;model.traverse(o=>{if(o.isMesh&&o.material){o.material.map=tex;o.material.needsUpdate=true}})});player.add(model);walkParts=null;modelBaseY=model.position.y;mixer=new THREE.AnimationMixer(model);fbxLoader.load('./assets/kenney/idle.fbx',a=>{if(a.animations[0]){idleAction=mixer.clipAction(a.animations[0]);idleAction.play();currentAction=idleAction}});fbxLoader.load('./assets/kenney/run.fbx',a=>{if(a.animations[0]){runAction=mixer.clipAction(a.animations[0]);runAction.timeScale=.72}})},undefined,()=>{});"""
+
+          if old not in s:
+              raise SystemExit('Expected old character loader block not found')
+          s = s.replace(old, new)
+
+          needle = "const speed=velocity.length();const moving=speed>.12;"
+          repl = needle + "if(mixer){setCharacterAction(moving);mixer.update(dt)}"
+          if needle not in s:
+              raise SystemExit('Movement marker not found')
+          s = s.replace(needle, repl, 1)
+
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Remove old character asset
+        run: |
+          rm -f character.glb
+
+      - name: Commit imported assets and game wiring
         run: |
           set -e
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add assets/kenney
+          git add -A assets/kenney index.html character.glb || true
           if git diff --cached --quiet; then
-            echo 'Assets already up to date.'
+            echo 'Character setup already up to date.'
           else
-            git commit -m 'Import Kenney animated character assets'
+            git commit -m 'Use Kenney animated character with idle and run'
             git push
           fi
