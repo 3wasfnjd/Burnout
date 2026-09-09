@@ -247,7 +247,7 @@ function doorPuzzle(){
 useBtn?.addEventListener('click',()=>{ const s=nearestStation(); if(s)openPuzzle(s); else if(hint)hint.textContent='اقترب من إحدى محطات النظام'; });
 
 const keys={}; addEventListener('keydown',e=>keys[e.code]=true); addEventListener('keyup',e=>keys[e.code]=false);
-let yaw=Math.PI, pitch=-.05, dragging=false, lx=0,ly=0;
+let yaw=0, pitch=-.05, dragging=false, lx=0,ly=0;
 renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lx=e.clientX;ly=e.clientY;});
 addEventListener('pointerup',()=>dragging=false);
 addEventListener('pointermove',e=>{if(!dragging||renderer.xr.isPresenting)return;const dx=e.clientX-lx,dy=e.clientY-ly;lx=e.clientX;ly=e.clientY;yaw-=dx*.004;pitch=Math.max(-1.05,Math.min(.85,pitch-dy*.003));});
