@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { ARManager } from './ARManager.js';
+import { PlaceableObject } from './PlaceableObject.js';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x101316);
@@ -202,22 +203,10 @@ async function buildRoom(){
       resolve(tex);
     },undefined,reject);
   }).catch(()=>null);
-  const floorXs=[-4.5,-2.7,-0.9,0.9,2.7,4.5];
-  const floorZs=[-4.2,-2.4,-0.6,1.2,3.0];
-  for(let zi=0;zi<floorZs.length;zi++)for(let xi=0;xi<floorXs.length;xi++){
-    const floorObj=await fit(paths.floor,[floorXs[xi],0,floorZs[zi]],[1.72,.12,1.72]);
+  for(let x=-4.5;x<=4.5;x+=1.8)for(let z=-4.2;z<=4.2;z+=1.8){
+    const floorObj=await fit(paths.floor,[x,0,z],[1.72,.12,1.72]);
     if(floorObj&&crackedFloorTexture){
-      const tileTex=crackedFloorTexture.clone();
-      tileTex.wrapS=THREE.RepeatWrapping;
-      tileTex.wrapT=THREE.RepeatWrapping;
-      tileTex.repeat.set(1/floorXs.length,1/floorZs.length);
-      tileTex.offset.set(xi/floorXs.length,1-(zi+1)/floorZs.length);
-      tileTex.needsUpdate=true;
-      floorObj.traverse(n=>{
-        if(!n.isMesh)return;
-        n.material=new THREE.MeshStandardMaterial({map:tileTex,roughness:.96,metalness:.02});
-        n.receiveShadow=true;
-      });
+      floorObj.traverse(n=>{if(!n.isMesh)return; n.material=new THREE.MeshStandardMaterial({map:crackedFloorTexture,roughness:.96,metalness:.02}); n.receiveShadow=true;});
     }
   }
   // WallAstra's authored front faces +X. Rotate each side so its front faces the room interior.
@@ -263,12 +252,17 @@ const vrBtn=VRButton.createButton(renderer,{optionalFeatures:['local-floor','bou
 const arBtn=document.createElement('button');arBtn.textContent='ENTER AR';arBtn.className='b17-ar';document.body.appendChild(arBtn);
 const controllers=[renderer.xr.getController(0),renderer.xr.getController(1)];controllers.forEach(c=>scene.add(c));
 const arManager=new ARManager({renderer,scene,controllers});let xrMode='flat';
+const roomPlaceable=new PlaceableObject(room,{desktopScale:1,arScale:.22});
 const arAvatarPos=new THREE.Vector3(0,0,3.0),arRoomQuat=new THREE.Quaternion(),arInvRoomQuat=new THREE.Quaternion(),arLocalMove=new THREE.Vector3();
 function resetArAvatar(){arAvatarPos.set(0,0,3.0);avatar.position.copy(arAvatarPos);avatar.rotation.y=Math.PI;setAvatarMotion(false);}
-arManager.onPlaced=({position,quaternion})=>{room.position.copy(position);room.quaternion.copy(quaternion);room.scale.setScalar(.22);room.visible=true;resetArAvatar();avatar.visible=true;};
+arManager.onPlaced=({position,quaternion})=>{roomPlaceable.placeInAR({position,quaternion});resetArAvatar();avatar.visible=true;};
+// ARManager tracks a real XRAnchor once placed and recomputes position/quaternion
+// each frame to correct SLAM drift - this callback is what actually applies that
+// correction to the room. Without it the anchor math ran but never reached the scene.
+arManager.onAnchorUpdate=({position,quaternion})=>{roomPlaceable.syncFromAnchor(position,quaternion);};
 arBtn.onclick=async()=>{try{startBgm();await arManager.requestSession();}catch(e){console.error(e)}};
-renderer.xr.addEventListener('sessionstart',()=>{startBgm();const s=renderer.xr.getSession();xrMode=s?.environmentBlendMode==='opaque'?'vr':'ar';if(xrMode==='ar'){avatar.visible=false;scene.background=null;scene.fog=null;room.visible=false;}else{avatar.visible=false;room.visible=true;room.position.set(0,0,0);room.quaternion.identity();room.scale.setScalar(1);player.position.set(0,1.66,3.9);}});
-renderer.xr.addEventListener('sessionend',()=>{xrMode='flat';avatar.visible=true;scene.background=new THREE.Color(0x101316);scene.fog=new THREE.FogExp2(0x121619,.008);room.visible=true;room.position.set(0,0,0);room.quaternion.identity();room.scale.setScalar(1);});
+renderer.xr.addEventListener('sessionstart',()=>{startBgm();const s=renderer.xr.getSession();xrMode=s?.environmentBlendMode==='opaque'?'vr':'ar';if(xrMode==='ar'){avatar.visible=false;scene.background=null;scene.fog=null;roomPlaceable.toARPending();}else{avatar.visible=false;roomPlaceable.toVR();player.position.set(0,1.66,3.9);}});
+renderer.xr.addEventListener('sessionend',()=>{xrMode='flat';avatar.visible=true;scene.background=new THREE.Color(0x101316);scene.fog=new THREE.FogExp2(0x121619,.008);roomPlaceable.toDesktop();});
 
 function controllerNearestStation(controller, maxDistance){
   const cp=new THREE.Vector3();controller.getWorldPosition(cp);let best=null,d=Infinity;
