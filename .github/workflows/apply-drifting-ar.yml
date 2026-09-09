@@ -1,0 +1,25 @@
+name: Apply Drifting AR architecture
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-drifting-ar.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply Drifting AR architecture
+        run: python3 .github/scripts/apply_drifting_ar.py
+      - name: Verify syntax
+        run: |
+          node --check src/ARManager.js
+          node --check src/main.js
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/ARManager.js src/main.js
+          git commit -m "Port Drifting AR placement architecture to Shelter" || exit 0
+          git push
