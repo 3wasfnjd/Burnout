@@ -23,7 +23,7 @@ document.body.prepend(renderer.domElement);
 const camera = new THREE.PerspectiveCamera(66, innerWidth / innerHeight, 0.05, 80);
 const player = new THREE.Group();
 player.position.set(0, 1.66, 3.9);
-camera.position.set(0, .28, 3.15);
+camera.position.set(0, .48, 2.2);
 player.add(camera);
 scene.add(player);
 
@@ -92,15 +92,18 @@ Promise.all([
   avatar.rotation.y=Math.PI;
 }).catch(e=>console.warn('BUNKER 17 character failed to load',e));
 
-function syncAvatar(moving,dt){
+function setAvatarMotion(moving){
+  if(!avatarModel||moving===avatarMoving)return;
+  avatarMoving=moving;
+  if(moving&&avatarRun){avatarIdle?.fadeOut(.18);avatarRun.reset().fadeIn(.18).play();}
+  else if(avatarIdle){avatarRun?.fadeOut(.18);avatarIdle.reset().fadeIn(.18).play();}
+}
+function syncFlatAvatar(moving,dt){
   if(!avatarModel)return;
   avatar.position.set(player.position.x,0,player.position.z);
   avatar.rotation.y=yaw+Math.PI;
   avatarMixer?.update(dt);
-  if(moving===avatarMoving)return;
-  avatarMoving=moving;
-  if(moving&&avatarRun){avatarIdle?.fadeOut(.18);avatarRun.reset().fadeIn(.18).play();}
-  else if(avatarIdle){avatarRun?.fadeOut(.18);avatarIdle.reset().fadeIn(.18).play();}
+  setAvatarMotion(moving);
 }
 const cache = new Map();
 const loadingScreen = document.getElementById('loadingScreen');
@@ -235,9 +238,11 @@ const vrBtn=VRButton.createButton(renderer,{optionalFeatures:['local-floor','bou
 const arBtn=document.createElement('button');arBtn.textContent='ENTER AR';arBtn.className='b17-ar';document.body.appendChild(arBtn);
 const controllers=[renderer.xr.getController(0),renderer.xr.getController(1)];controllers.forEach(c=>scene.add(c));
 const arManager=new ARManager({renderer,scene,controllers});let xrMode='flat';
-arManager.onPlaced=({position,quaternion})=>{room.position.copy(position);room.quaternion.copy(quaternion);room.scale.setScalar(.22);room.visible=true;};
+const arAvatarPos=new THREE.Vector3(0,0,3.0),arRoomQuat=new THREE.Quaternion(),arInvRoomQuat=new THREE.Quaternion(),arLocalMove=new THREE.Vector3();
+function resetArAvatar(){arAvatarPos.set(0,0,3.0);avatar.position.copy(arAvatarPos);avatar.rotation.y=Math.PI;setAvatarMotion(false);}
+arManager.onPlaced=({position,quaternion})=>{room.position.copy(position);room.quaternion.copy(quaternion);room.scale.setScalar(.22);room.visible=true;resetArAvatar();avatar.visible=true;};
 arBtn.onclick=async()=>{try{startBgm();await arManager.requestSession();}catch(e){console.error(e)}};
-renderer.xr.addEventListener('sessionstart',()=>{startBgm();const s=renderer.xr.getSession();xrMode=s?.environmentBlendMode==='opaque'?'vr':'ar';avatar.visible=xrMode!=='vr';if(xrMode==='ar'){scene.background=null;scene.fog=null;room.visible=false;}else{room.visible=true;room.position.set(0,0,0);room.quaternion.identity();room.scale.setScalar(1);player.position.set(0,1.66,3.9);}});
+renderer.xr.addEventListener('sessionstart',()=>{startBgm();const s=renderer.xr.getSession();xrMode=s?.environmentBlendMode==='opaque'?'vr':'ar';if(xrMode==='ar'){avatar.visible=false;scene.background=null;scene.fog=null;room.visible=false;}else{avatar.visible=false;room.visible=true;room.position.set(0,0,0);room.quaternion.identity();room.scale.setScalar(1);player.position.set(0,1.66,3.9);}});
 renderer.xr.addEventListener('sessionend',()=>{xrMode='flat';avatar.visible=true;scene.background=new THREE.Color(0x101316);scene.fog=new THREE.FogExp2(0x121619,.008);room.visible=true;room.position.set(0,0,0);room.quaternion.identity();room.scale.setScalar(1);});
 
 function controllerNearestStation(controller, maxDistance){
@@ -275,17 +280,19 @@ function moveVR(dt){
 function adjustAR(dt){
   if(!arManager.isPlaced())return;
   const {x,z}=arManager.getMoveInput();const rot=arManager.getRotateInput();
-  const xrCam=renderer.xr.getCamera(camera);xrCam.getWorldDirection(xrForward);xrForward.y=0;if(xrForward.lengthSq()>.001)xrForward.normalize();else xrForward.set(0,0,-1);
-  xrRight.crossVectors(xrForward,xrUp).normalize();
-  room.position.addScaledVector(xrRight,x*.55*dt).addScaledVector(xrForward,-z*.55*dt);
-  if(rot!==0)room.rotateY(-rot*1.25*dt);
+  const xrCam=renderer.xr.getCamera(camera);xrCam.getWorldDirection(xrForward);xrForward.y=0;if(xrForward.lengthSq()<.001)xrForward.set(0,0,-1);else xrForward.normalize();
+  room.getWorldQuaternion(arRoomQuat);arInvRoomQuat.copy(arRoomQuat).invert();xrForward.applyQuaternion(arInvRoomQuat);xrForward.y=0;if(xrForward.lengthSq()<.001)xrForward.set(0,0,-1);else xrForward.normalize();
+  xrRight.set(xrForward.z,0,-xrForward.x);arLocalMove.set(0,0,0).addScaledVector(xrRight,x).addScaledVector(xrForward,-z);if(arLocalMove.lengthSq()>1)arLocalMove.normalize();
+  const moving=arLocalMove.lengthSq()>.0001;
+  if(moving){arAvatarPos.addScaledVector(arLocalMove,2.2*dt);arAvatarPos.x=THREE.MathUtils.clamp(arAvatarPos.x,-4.65,4.65);arAvatarPos.z=THREE.MathUtils.clamp(arAvatarPos.z,-4.35,4.35);avatar.position.copy(arAvatarPos);avatar.rotation.y=Math.atan2(arLocalMove.x,arLocalMove.z);}else if(Math.abs(rot)>.15){avatar.rotation.y-=rot*1.7*dt;}
+  avatarMixer?.update(dt);setAvatarMotion(moving);
 }
 
 const clock=new THREE.Clock();
 function tick(time,frame){
   const dt=Math.min(clock.getDelta(),.04);
   if(xrMode==='flat'){
-    player.rotation.y=yaw;camera.rotation.x=pitch;const f=(keys.KeyW?1:0)-(keys.KeyS?1:0)-jy;const r=(keys.KeyD?1:0)-(keys.KeyA?1:0)+jx;const v=new THREE.Vector3(r,0,-f);if(v.lengthSq()>1)v.normalize();v.applyAxisAngle(new THREE.Vector3(0,1,0),yaw).multiplyScalar(2.5*dt);player.position.add(v);player.position.x=THREE.MathUtils.clamp(player.position.x,-4.65,4.65);player.position.z=THREE.MathUtils.clamp(player.position.z,-4.35,4.35);syncAvatar(v.lengthSq()>.00001,dt);const s=nearestStation();if(s&&hint)hint.textContent=`${s.name} — اضغط تفاعل`;else if(hint)hint.textContent=`النظام ${stage+1}/5 — ${stageNames[stage]}`;
+    player.rotation.y=yaw;camera.rotation.x=pitch;const f=(keys.KeyW?1:0)-(keys.KeyS?1:0)-jy;const r=(keys.KeyD?1:0)-(keys.KeyA?1:0)+jx;const v=new THREE.Vector3(r,0,-f);if(v.lengthSq()>1)v.normalize();v.applyAxisAngle(new THREE.Vector3(0,1,0),yaw).multiplyScalar(2.5*dt);player.position.add(v);player.position.x=THREE.MathUtils.clamp(player.position.x,-4.65,4.65);player.position.z=THREE.MathUtils.clamp(player.position.z,-4.35,4.35);syncFlatAvatar(v.lengthSq()>.00001,dt);const s=nearestStation();if(s&&hint)hint.textContent=`${s.name} — اضغط تفاعل`;else if(hint)hint.textContent=`النظام ${stage+1}/5 — ${stageNames[stage]}`;
   } else if(xrMode==='vr') {
     moveVR(dt);
   } else if(xrMode==='ar') {
