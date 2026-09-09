@@ -1,1 +1,1 @@
-run: 2026-09-09 premium room1 model-only conversion
+run: 2026-09-09 premium room1 model-only conversion retry 2
