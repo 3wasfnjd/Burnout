@@ -60,22 +60,14 @@ async function fit(url, position, size, rotationY = 0, parent = room) {
     const obj = await loadModel(url);
     const isMainWall = url.includes('WallAstra_Straight.gltf');
     const isLowerWall = url.includes('BottomMetal_Straight.gltf');
-    obj.rotation.y = rotationY + (isMainWall ? Math.PI / 2 : 0);
+    obj.rotation.y = rotationY;
     obj.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(obj);
     const s = box.getSize(new THREE.Vector3());
     const target = new THREE.Vector3(...size);
     let k;
-    if (isMainWall) {
-      // WallAstra is authored as a full wall panel: preserve its proportions and scale from height.
-      // The previous generic fit used the requested 0.34 m thickness as the limiting axis,
-      // shrinking a 3 m wall to a strip near the floor.
-      k = target.y / Math.max(s.y, .001);
-    } else if (isLowerWall) {
-      k = target.y / Math.max(s.y, .001);
-    } else {
-      k = Math.min(target.x / Math.max(s.x, .001), target.y / Math.max(s.y, .001), target.z / Math.max(s.z, .001));
-    }
+    if (isMainWall || isLowerWall) k = target.y / Math.max(s.y, .001);
+    else k = Math.min(target.x / Math.max(s.x, .001), target.y / Math.max(s.y, .001), target.z / Math.max(s.z, .001));
     obj.scale.setScalar(k);
     obj.updateMatrixWorld(true);
     const b2 = new THREE.Box3().setFromObject(obj);
@@ -128,14 +120,14 @@ for(const [x,y,z,color,intensity,distance] of [[-4.1,2.0,-2.5,0xffd5ad,2.5,5.5],
 
 async function buildRoom(){
   for(let x=-4.5;x<=4.5;x+=1.8)for(let z=-4.2;z<=4.2;z+=1.8)await fit(paths.floor,[x,0,z],[1.72,.12,1.72]);
-  // Two correctly oriented full-height wall panels per long side instead of many shrunken strips.
+  // WallAstra's authored front faces +X. Rotate each side so its front faces the room interior.
   for(const x of [-2.5,2.5]){
-    await fit(paths.wall,[x,.02,-5.0],[5.0,3.75,1.5],0);
-    await fit(paths.wall,[x,.02,5.0],[5.0,3.75,1.5],Math.PI);
+    await fit(paths.wall,[x,.02,-5.0],[5.0,3.75,1.5],-Math.PI/2); // back wall faces +Z
+    await fit(paths.wall,[x,.02,5.0],[5.0,3.75,1.5], Math.PI/2);  // front wall faces -Z
   }
   for(const z of [-2.5,2.5]){
-    await fit(paths.wall,[-5.4,.02,z],[1.5,3.75,5.0],Math.PI/2);
-    await fit(paths.wall,[5.4,.02,z],[1.5,3.75,5.0],-Math.PI/2);
+    await fit(paths.wall,[-5.4,.02,z],[1.5,3.75,5.0],0);          // left wall faces +X
+    await fit(paths.wall,[5.4,.02,z],[1.5,3.75,5.0],Math.PI);    // right wall faces -X
   }
   for(let x=-3.6;x<=3.6;x+=3.6)await fit(paths.hanging,[x,3.15,0],[1.1,.7,1.1]);
   await fit(paths.sconce,[-4.92,2.0,-2.4],[.65,.85,.55],Math.PI/2);await fit(paths.sconce,[4.92,2.0,-2.4],[.65,.85,.55],-Math.PI/2);
@@ -163,7 +155,73 @@ function cluePuzzle(){pDesc.textContent='استخرج الأدلة بالترت�
 function consolePuzzle(){pDesc.textContent='أدخل الرموز حسب أرقام الأدلة، وليس حسب مكان العثور عليها.';const answer=['III','△','✕','○'],symbols=['△','○','III','✕'];let entry=[];game.innerHTML='<div class="b17-symbols"></div><div class="b17-entry">— — — —</div>';const wrap=game.firstChild,out=game.lastChild;symbols.forEach(sym=>{const b=document.createElement('button');b.textContent=sym;b.onclick=()=>{if(entry.length<4)entry.push(sym);out.textContent=entry.join('  ');if(entry.length===4){if(entry.every((x,i)=>x===answer[i]))finishPuzzle(3,'SECURITY CORE ACCEPTED — DOOR CODE 7314');else{status.textContent='ACCESS DENIED — أعد قراءة أرقام الأدلة';entry=[];setTimeout(()=>out.textContent='— — — —',450);}}};wrap.appendChild(b);});}
 function doorPuzzle(){pDesc.textContent='أدخل رمز الأمان الذي ظهر على وحدة التحكم، ثم فعّل قفل الباب الميكانيكي.';let code='';game.innerHTML='<div class="b17-keypad"></div><div class="b17-code">____</div>';const pad=game.firstChild,out=game.lastChild;[...'1234567890'].forEach(n=>{const b=document.createElement('button');b.textContent=n;b.onclick=()=>{if(code.length<4)code+=n;out.textContent=code.padEnd(4,'_');if(code.length===4){if(code==='7314'){status.textContent='CODE ACCEPTED — القفل الميكانيكي جاهز';pad.querySelectorAll('button').forEach(x=>x.disabled=true);const open=document.createElement('button');open.className='b17-open';open.textContent='تدوير مقبض الباب';let turns=0;open.onclick=()=>{turns++;open.style.transform=`rotate(${turns*45}deg)`;status.textContent=`تحرير الأقفال ${turns}/4`;if(turns>=4){finishPuzzle(4,'BUNKER 17 OPEN — تم تحرير الباب');modal.classList.remove('show');}};game.appendChild(open);}else{status.textContent='رمز غير صحيح';code='';setTimeout(()=>out.textContent='____',350);}}};pad.appendChild(b);});}
 useBtn?.addEventListener('click',()=>{const s=nearestStation();if(s)openPuzzle(s);else if(hint)hint.textContent='اقترب من إحدى محطات النظام';});
+
 const keys={};addEventListener('keydown',e=>keys[e.code]=true);addEventListener('keyup',e=>keys[e.code]=false);let yaw=0,pitch=-.05,dragging=false,lx=0,ly=0;renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lx=e.clientX;ly=e.clientY;});addEventListener('pointerup',()=>dragging=false);addEventListener('pointermove',e=>{if(!dragging||renderer.xr.isPresenting)return;const dx=e.clientX-lx,dy=e.clientY-ly;lx=e.clientX;ly=e.clientY;yaw-=dx*.004;pitch=Math.max(-1.05,Math.min(.85,pitch-dy*.003));});
 const joy=document.getElementById('joy'),knob=document.getElementById('knob');let joyId=null,jx=0,jy=0;joy?.addEventListener('pointerdown',e=>{joyId=e.pointerId;joy.setPointerCapture(e.pointerId);});joy?.addEventListener('pointermove',e=>{if(e.pointerId!==joyId)return;const r=joy.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;let dx=e.clientX-cx,dy=e.clientY-cy;const m=Math.hypot(dx,dy),max=r.width*.32;if(m>max){dx*=max/m;dy*=max/m;}jx=dx/max;jy=dy/max;if(knob)knob.style.transform=`translate(${dx}px,${dy}px)`;});const joyEnd=e=>{if(e.pointerId!==joyId)return;joyId=null;jx=jy=0;if(knob)knob.style.transform='translate(0,0)';};joy?.addEventListener('pointerup',joyEnd);joy?.addEventListener('pointercancel',joyEnd);
-const vrBtn=VRButton.createButton(renderer,{optionalFeatures:['local-floor','bounded-floor','hand-tracking','dom-overlay'],domOverlay:{root:document.body}});Object.assign(vrBtn.style,{position:'fixed',left:'12px',bottom:'12px',zIndex:'50'});document.body.appendChild(vrBtn);const arBtn=document.createElement('button');arBtn.textContent='ENTER AR';arBtn.className='b17-ar';document.body.appendChild(arBtn);const controllers=[renderer.xr.getController(0),renderer.xr.getController(1)];controllers.forEach(c=>scene.add(c));const arManager=new ARManager({renderer,scene,controllers});let xrMode='flat';arManager.onPlaced=({position,quaternion})=>{room.position.copy(position);room.quaternion.copy(quaternion);room.scale.setScalar(.22);room.visible=true;};arBtn.onclick=async()=>{try{await arManager.requestSession();}catch(e){console.error(e)}};renderer.xr.addEventListener('sessionstart',()=>{const s=renderer.xr.getSession();xrMode=s?.environmentBlendMode==='opaque'?'vr':'ar';if(xrMode==='ar'){scene.background=null;scene.fog=null;room.visible=false;}else{room.visible=true;room.position.set(0,0,0);room.quaternion.identity();room.scale.setScalar(1);player.position.set(0,1.66,3.9);}});renderer.xr.addEventListener('sessionend',()=>{xrMode='flat';scene.background=new THREE.Color(0x101316);scene.fog=new THREE.FogExp2(0x121619,.008);room.visible=true;room.position.set(0,0,0);room.quaternion.identity();room.scale.setScalar(1);});controllers.forEach(c=>c.addEventListener('selectstart',()=>{if(xrMode==='vr'){const p=new THREE.Vector3();c.getWorldPosition(p);let best=null,d=999;for(const s of stations){const dd=p.distanceTo(s.pos);if(dd<d){d=dd;best=s;}}if(best&&d<3)openPuzzle(best);}}));
-const clock=new THREE.Clock();function tick(){const dt=Math.min(clock.getDelta(),.04);if(xrMode==='flat'){player.rotation.y=yaw;camera.rotation.x=pitch;const f=(keys.KeyW?1:0)-(keys.KeyS?1:0)-jy;const r=(keys.KeyD?1:0)-(keys.KeyA?1:0)+jx;const v=new THREE.Vector3(r,0,-f);if(v.lengthSq()>1)v.normalize();v.applyAxisAngle(new THREE.Vector3(0,1,0),yaw).multiplyScalar(2.5*dt);player.position.add(v);player.position.x=THREE.MathUtils.clamp(player.position.x,-4.65,4.65);player.position.z=THREE.MathUtils.clamp(player.position.z,-4.35,4.35);const s=nearestStation();if(s&&hint)hint.textContent=`${s.name} — اضغط تفاعل`;else if(hint)hint.textContent=`النظام ${stage+1}/5 — ${stageNames[stage]}`;}renderer.render(scene,camera);}renderer.setAnimationLoop(tick);addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});setStage(0);buildRoom();
+
+const vrBtn=VRButton.createButton(renderer,{optionalFeatures:['local-floor','bounded-floor','hand-tracking','dom-overlay'],domOverlay:{root:document.body}});Object.assign(vrBtn.style,{position:'fixed',left:'12px',bottom:'12px',zIndex:'50'});document.body.appendChild(vrBtn);
+const arBtn=document.createElement('button');arBtn.textContent='ENTER AR';arBtn.className='b17-ar';document.body.appendChild(arBtn);
+const controllers=[renderer.xr.getController(0),renderer.xr.getController(1)];controllers.forEach(c=>scene.add(c));
+const arManager=new ARManager({renderer,scene,controllers});let xrMode='flat';
+arManager.onPlaced=({position,quaternion})=>{room.position.copy(position);room.quaternion.copy(quaternion);room.scale.setScalar(.22);room.visible=true;};
+arBtn.onclick=async()=>{try{await arManager.requestSession();}catch(e){console.error(e)}};
+renderer.xr.addEventListener('sessionstart',()=>{const s=renderer.xr.getSession();xrMode=s?.environmentBlendMode==='opaque'?'vr':'ar';if(xrMode==='ar'){scene.background=null;scene.fog=null;room.visible=false;}else{room.visible=true;room.position.set(0,0,0);room.quaternion.identity();room.scale.setScalar(1);player.position.set(0,1.66,3.9);}});
+renderer.xr.addEventListener('sessionend',()=>{xrMode='flat';scene.background=new THREE.Color(0x101316);scene.fog=new THREE.FogExp2(0x121619,.008);room.visible=true;room.position.set(0,0,0);room.quaternion.identity();room.scale.setScalar(1);});
+
+function controllerNearestStation(controller, maxDistance){
+  const cp=new THREE.Vector3();controller.getWorldPosition(cp);let best=null,d=Infinity;
+  for(const s of stations){const wp=room.localToWorld(s.pos.clone());const dd=cp.distanceTo(wp);if(dd<d){d=dd;best=s;}}
+  return best&&d<maxDistance?best:null;
+}
+controllers.forEach(c=>c.addEventListener('selectstart',()=>{
+  if(xrMode==='ar'){
+    if(!arManager.isPlaced()){arManager.confirmPlacement();return;}
+    const s=controllerNearestStation(c,.85);if(s)openPuzzle(s);return;
+  }
+  if(xrMode==='vr'){const s=controllerNearestStation(c,3.0);if(s)openPuzzle(s);}
+}));
+
+function xrAxis(gamepad,index){
+  if(!gamepad?.axes?.length)return 0;
+  let v=gamepad.axes.length>index?gamepad.axes[index]:0;
+  if((!v||Math.abs(v)<.15)&&index>=2&&gamepad.axes.length>1)v=gamepad.axes[index-2]||0;
+  return Math.abs(v)>.15?v:0;
+}
+function xrGamepad(hand){
+  const session=renderer.xr.getSession();if(!session)return null;
+  for(const src of session.inputSources)if(src.handedness===hand&&src.gamepad)return src.gamepad;
+  return null;
+}
+const xrForward=new THREE.Vector3(),xrRight=new THREE.Vector3(),xrUp=new THREE.Vector3(0,1,0),xrMove=new THREE.Vector3();
+function moveVR(dt){
+  const gp=xrGamepad('left')||xrGamepad('right');if(!gp)return;
+  const x=xrAxis(gp,2),z=xrAxis(gp,3);if(x===0&&z===0)return;
+  const xrCam=renderer.xr.getCamera(camera);xrCam.getWorldDirection(xrForward);xrForward.y=0;if(xrForward.lengthSq()<.001)return;xrForward.normalize();
+  xrRight.crossVectors(xrForward,xrUp).normalize();xrMove.set(0,0,0).addScaledVector(xrRight,x).addScaledVector(xrForward,-z);if(xrMove.lengthSq()>1)xrMove.normalize();
+  player.position.addScaledVector(xrMove,1.9*dt);player.position.x=THREE.MathUtils.clamp(player.position.x,-4.65,4.65);player.position.z=THREE.MathUtils.clamp(player.position.z,-4.35,4.35);
+}
+function adjustAR(dt){
+  if(!arManager.isPlaced())return;
+  const {x,z}=arManager.getMoveInput();const rot=arManager.getRotateInput();
+  const xrCam=renderer.xr.getCamera(camera);xrCam.getWorldDirection(xrForward);xrForward.y=0;if(xrForward.lengthSq()>.001)xrForward.normalize();else xrForward.set(0,0,-1);
+  xrRight.crossVectors(xrForward,xrUp).normalize();
+  room.position.addScaledVector(xrRight,x*.55*dt).addScaledVector(xrForward,-z*.55*dt);
+  if(rot!==0)room.rotateY(-rot*1.25*dt);
+}
+
+const clock=new THREE.Clock();
+function tick(time,frame){
+  const dt=Math.min(clock.getDelta(),.04);
+  if(xrMode==='flat'){
+    player.rotation.y=yaw;camera.rotation.x=pitch;const f=(keys.KeyW?1:0)-(keys.KeyS?1:0)-jy;const r=(keys.KeyD?1:0)-(keys.KeyA?1:0)+jx;const v=new THREE.Vector3(r,0,-f);if(v.lengthSq()>1)v.normalize();v.applyAxisAngle(new THREE.Vector3(0,1,0),yaw).multiplyScalar(2.5*dt);player.position.add(v);player.position.x=THREE.MathUtils.clamp(player.position.x,-4.65,4.65);player.position.z=THREE.MathUtils.clamp(player.position.z,-4.35,4.35);const s=nearestStation();if(s&&hint)hint.textContent=`${s.name} — اضغط تفاعل`;else if(hint)hint.textContent=`النظام ${stage+1}/5 — ${stageNames[stage]}`;
+  } else if(xrMode==='vr') {
+    moveVR(dt);
+  } else if(xrMode==='ar') {
+    arManager.update(frame,dt);
+    adjustAR(dt);
+  }
+  renderer.render(scene,camera);
+}
+renderer.setAnimationLoop(tick);
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+setStage(0);buildRoom();
