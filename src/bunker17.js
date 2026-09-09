@@ -194,7 +194,20 @@ const wallWashLights=[];
 for(const [x,y,z,color,intensity,distance] of [[-4.1,2.0,-2.5,0xffd5ad,2.5,5.5],[-4.1,2.0,2.2,0xffd5ad,2.3,5.5],[4.1,2.0,-2.5,0xffd5ad,2.5,5.5],[4.1,2.0,2.2,0xffd5ad,2.3,5.5],[-3,2.0,-4.0,0xd9efff,2.3,6],[0,2.0,-4.0,0xd9efff,2.5,6],[3,2.0,-4.0,0xd9efff,2.3,6]]){const l=new THREE.PointLight(color,intensity,distance,1.75);l.position.set(x,y,z);l.castShadow=false;room.add(l);wallWashLights.push(l);}
 
 async function buildRoom(){
-  for(let x=-4.5;x<=4.5;x+=1.8)for(let z=-4.2;z<=4.2;z+=1.8)await fit(paths.floor,[x,0,z],[1.72,.12,1.72]);
+  const crackedFloorTexture = await new Promise((resolve,reject)=>{
+    textureLoader.load('./assets/textures/cracked_asphalt_floor.jpg', tex=>{
+      tex.colorSpace=THREE.SRGBColorSpace;
+      tex.wrapS=THREE.ClampToEdgeWrapping; tex.wrapT=THREE.ClampToEdgeWrapping;
+      tex.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy?.()||4);
+      resolve(tex);
+    },undefined,reject);
+  }).catch(()=>null);
+  for(let x=-4.5;x<=4.5;x+=1.8)for(let z=-4.2;z<=4.2;z+=1.8){
+    const floorObj=await fit(paths.floor,[x,0,z],[1.72,.12,1.72]);
+    if(floorObj&&crackedFloorTexture){
+      floorObj.traverse(n=>{if(!n.isMesh)return; n.material=new THREE.MeshStandardMaterial({map:crackedFloorTexture,roughness:.96,metalness:.02}); n.receiveShadow=true;});
+    }
+  }
   // WallAstra's authored front faces +X. Rotate each side so its front faces the room interior.
   for(const x of [-2.5,2.5]){
     await fit(paths.wall,[x,.02,-5.0],[5.0,3.75,1.5],-Math.PI/2); // back wall faces +Z
