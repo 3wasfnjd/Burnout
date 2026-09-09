@@ -1,0 +1,33 @@
+name: Apply cracked asphalt floor
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/apply_cracked_floor.py'
+      - 'assets/textures/cracked_asphalt_floor.jpg'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Apply floor texture patch
+        run: python tools/apply_cracked_floor.py
+      - name: Commit runtime change
+        run: |
+          if git diff --quiet -- src/bunker17.js; then
+            echo 'No runtime change required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/bunker17.js
+          git commit -m 'Apply cracked asphalt floor texture'
+          git push
