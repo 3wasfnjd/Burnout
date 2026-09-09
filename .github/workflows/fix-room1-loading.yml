@@ -1,0 +1,55 @@
+name: Fix Room1 Loading
+on:
+  push:
+    paths:
+      - '.room1-loading-fix-trigger'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Patch loader cache and fail-safe
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('src/main.js')
+          s=p.read_text()
+
+          needle="const gltf=new GLTFLoader(assetManager),Q='./assets/vendor/quaternius-scifi/Modular%20SciFi%20MegaKit%5BStandard%5D/glTF/',K='./assets/vendor/kenney-furniture/Models/GLTF%20format/';"
+          repl="const gltf=new GLTFLoader(assetManager),Q='./assets/vendor/quaternius-scifi/Modular%20SciFi%20MegaKit%5BStandard%5D/glTF/',K='./assets/vendor/kenney-furniture/Models/GLTF%20format/';const modelCache=new Map();async function cachedScene(url){if(!modelCache.has(url))modelCache.set(url,gltf.loadAsync(url).then(a=>a.scene));const src=await modelCache.get(url);return src.clone(true)}"
+          if needle not in s:
+            raise SystemExit('loader anchor not found')
+          s=s.replace(needle,repl,1)
+
+          s,n=re.subn(r"const a=await gltf\.loadAsync\(Q\+path\),o=a\.scene;", "const o=await cachedScene(Q+path);", s, count=1)
+          if n!=1: raise SystemExit('qfit loader not patched')
+          s,n=re.subn(r"const a=await gltf\.loadAsync\(K\+f\),o=a\.scene;", "const o=await cachedScene(K+f);", s, count=1)
+          if n!=1: raise SystemExit('kprop loader not patched')
+          s,n=re.subn(r"const a=await gltf\.loadAsync\(PH\+asset\+'/model\.gltf'\),o=a\.scene;", "const o=await cachedScene(PH+asset+'/model.gltf');", s, count=1)
+          if n!=1: raise SystemExit('phfit loader not patched')
+
+          # Loading overlay must never trap the player forever if one mobile request stalls.
+          anchor="assetManager.onError=url=>{console.warn('Asset failed',url);if(loadingText)loadingText.textContent='تعذر تحميل أحد المجسمات — متابعة التشغيل'};"
+          fallback=anchor+"let loadingFailsafe=setTimeout(()=>{if(loadingText)loadingText.textContent='تم تشغيل الغرفة — قد تستمر بعض المجسمات بالتحميل';loadingScreen?.classList.add('done')},18000);const oldOnLoad=assetManager.onLoad;assetManager.onLoad=()=>{clearTimeout(loadingFailsafe);oldOnLoad?.()};"
+          if anchor not in s: raise SystemExit('loading anchor not found')
+          s=s.replace(anchor,fallback,1)
+
+          p.write_text(s)
+          PY
+      - name: Check JavaScript syntax
+        run: node --check src/main.js
+      - name: Commit fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/main.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'Fix room 1 model loading stalls'
+          git push
