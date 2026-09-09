@@ -1,0 +1,24 @@
+name: Upgrade Room 1 Shell
+on:
+  push:
+    paths:
+      - '.github/workflows/upgrade-room1-shell.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Upgrade walls floor and door
+        run: python .github/scripts/upgrade_shell_room1.py
+      - name: Syntax check
+        run: node --check src/main.js
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main.js
+          git diff --cached --quiet || git commit -m "Redesign room 1 walls floor and blast door"
+          git push
