@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { ARManager } from './ARManager.js';
 
@@ -22,14 +23,85 @@ document.body.prepend(renderer.domElement);
 const camera = new THREE.PerspectiveCamera(66, innerWidth / innerHeight, 0.05, 80);
 const player = new THREE.Group();
 player.position.set(0, 1.66, 3.9);
+camera.position.set(0, .28, 3.15);
 player.add(camera);
 scene.add(player);
 
 const room = new THREE.Group();
 scene.add(room);
 
+// BUNKER 17 ambience/music. Browsers require the first play call to follow a user gesture.
+const bgm = new Audio('https://opengameart.org/sites/default/files/sector_0.mp3');
+bgm.loop = true;
+bgm.volume = .20;
+bgm.preload = 'auto';
+let bgmStarted = false;
+function startBgm(){
+  if (bgmStarted) return;
+  bgm.play().then(()=>{ bgmStarted = true; }).catch(()=>{});
+}
+['pointerdown','keydown','touchstart'].forEach(type=>addEventListener(type,startBgm,{once:true,passive:true}));
+const musicBtn=document.createElement('button');
+musicBtn.id='musicBtn';
+musicBtn.textContent='🔊';
+musicBtn.title='تشغيل/كتم الموسيقى';
+Object.assign(musicBtn.style,{position:'fixed',left:'12px',top:'12px',zIndex:'55',width:'42px',height:'42px',borderRadius:'50%',border:'1px solid #ffffff44',background:'#0a0d10dd',color:'#fff',fontSize:'18px',cursor:'pointer'});
+musicBtn.addEventListener('click',e=>{e.stopPropagation();startBgm();bgm.muted=!bgm.muted;musicBtn.textContent=bgm.muted?'🔇':'🔊';});
+document.body.appendChild(musicBtn);
+
+
 const assetManager = new THREE.LoadingManager();
 const loader = new GLTFLoader(assetManager);
+
+const fbxLoader = new FBXLoader(assetManager);
+const textureLoader = new THREE.TextureLoader(assetManager);
+const avatar = new THREE.Group();
+room.add(avatar);
+let avatarModel=null, avatarMixer=null, avatarIdle=null, avatarRun=null, avatarMoving=false;
+
+Promise.all([
+  fbxLoader.loadAsync('./assets/kenney/characterMedium.fbx'),
+  fbxLoader.loadAsync('./assets/kenney/idle.fbx'),
+  fbxLoader.loadAsync('./assets/kenney/run.fbx'),
+  textureLoader.loadAsync('./assets/kenney/humanMaleA.png')
+]).then(([model,idle,run,texture])=>{
+  texture.colorSpace=THREE.SRGBColorSpace;
+  texture.flipY=true;
+  model.updateMatrixWorld(true);
+  let box=new THREE.Box3().setFromObject(model);
+  const size=box.getSize(new THREE.Vector3());
+  model.scale.setScalar(1.72/Math.max(size.y,.001));
+  model.updateMatrixWorld(true);
+  box=new THREE.Box3().setFromObject(model);
+  const center=box.getCenter(new THREE.Vector3());
+  model.position.x-=center.x;
+  model.position.y-=box.min.y;
+  model.position.z-=center.z;
+  model.traverse(n=>{
+    if(!n.isMesh)return;
+    n.castShadow=true;
+    n.receiveShadow=true;
+    n.material=new THREE.MeshStandardMaterial({map:texture,roughness:.82,metalness:0});
+  });
+  avatarModel=model;
+  avatar.add(model);
+  avatarMixer=new THREE.AnimationMixer(model);
+  if(idle.animations[0]){avatarIdle=avatarMixer.clipAction(idle.animations[0],model);avatarIdle.play();}
+  if(run.animations[0]){avatarRun=avatarMixer.clipAction(run.animations[0],model);}
+  avatar.position.set(player.position.x,0,player.position.z);
+  avatar.rotation.y=Math.PI;
+}).catch(e=>console.warn('BUNKER 17 character failed to load',e));
+
+function syncAvatar(moving,dt){
+  if(!avatarModel)return;
+  avatar.position.set(player.position.x,0,player.position.z);
+  avatar.rotation.y=yaw+Math.PI;
+  avatarMixer?.update(dt);
+  if(moving===avatarMoving)return;
+  avatarMoving=moving;
+  if(moving&&avatarRun){avatarIdle?.fadeOut(.18);avatarRun.reset().fadeIn(.18).play();}
+  else if(avatarIdle){avatarRun?.fadeOut(.18);avatarIdle.reset().fadeIn(.18).play();}
+}
 const cache = new Map();
 const loadingScreen = document.getElementById('loadingScreen');
 const loadingBar = document.getElementById('loadingBar');
@@ -164,9 +236,9 @@ const arBtn=document.createElement('button');arBtn.textContent='ENTER AR';arBtn.
 const controllers=[renderer.xr.getController(0),renderer.xr.getController(1)];controllers.forEach(c=>scene.add(c));
 const arManager=new ARManager({renderer,scene,controllers});let xrMode='flat';
 arManager.onPlaced=({position,quaternion})=>{room.position.copy(position);room.quaternion.copy(quaternion);room.scale.setScalar(.22);room.visible=true;};
-arBtn.onclick=async()=>{try{await arManager.requestSession();}catch(e){console.error(e)}};
-renderer.xr.addEventListener('sessionstart',()=>{const s=renderer.xr.getSession();xrMode=s?.environmentBlendMode==='opaque'?'vr':'ar';if(xrMode==='ar'){scene.background=null;scene.fog=null;room.visible=false;}else{room.visible=true;room.position.set(0,0,0);room.quaternion.identity();room.scale.setScalar(1);player.position.set(0,1.66,3.9);}});
-renderer.xr.addEventListener('sessionend',()=>{xrMode='flat';scene.background=new THREE.Color(0x101316);scene.fog=new THREE.FogExp2(0x121619,.008);room.visible=true;room.position.set(0,0,0);room.quaternion.identity();room.scale.setScalar(1);});
+arBtn.onclick=async()=>{try{startBgm();await arManager.requestSession();}catch(e){console.error(e)}};
+renderer.xr.addEventListener('sessionstart',()=>{startBgm();const s=renderer.xr.getSession();xrMode=s?.environmentBlendMode==='opaque'?'vr':'ar';avatar.visible=xrMode!=='vr';if(xrMode==='ar'){scene.background=null;scene.fog=null;room.visible=false;}else{room.visible=true;room.position.set(0,0,0);room.quaternion.identity();room.scale.setScalar(1);player.position.set(0,1.66,3.9);}});
+renderer.xr.addEventListener('sessionend',()=>{xrMode='flat';avatar.visible=true;scene.background=new THREE.Color(0x101316);scene.fog=new THREE.FogExp2(0x121619,.008);room.visible=true;room.position.set(0,0,0);room.quaternion.identity();room.scale.setScalar(1);});
 
 function controllerNearestStation(controller, maxDistance){
   const cp=new THREE.Vector3();controller.getWorldPosition(cp);let best=null,d=Infinity;
@@ -213,7 +285,7 @@ const clock=new THREE.Clock();
 function tick(time,frame){
   const dt=Math.min(clock.getDelta(),.04);
   if(xrMode==='flat'){
-    player.rotation.y=yaw;camera.rotation.x=pitch;const f=(keys.KeyW?1:0)-(keys.KeyS?1:0)-jy;const r=(keys.KeyD?1:0)-(keys.KeyA?1:0)+jx;const v=new THREE.Vector3(r,0,-f);if(v.lengthSq()>1)v.normalize();v.applyAxisAngle(new THREE.Vector3(0,1,0),yaw).multiplyScalar(2.5*dt);player.position.add(v);player.position.x=THREE.MathUtils.clamp(player.position.x,-4.65,4.65);player.position.z=THREE.MathUtils.clamp(player.position.z,-4.35,4.35);const s=nearestStation();if(s&&hint)hint.textContent=`${s.name} — اضغط تفاعل`;else if(hint)hint.textContent=`النظام ${stage+1}/5 — ${stageNames[stage]}`;
+    player.rotation.y=yaw;camera.rotation.x=pitch;const f=(keys.KeyW?1:0)-(keys.KeyS?1:0)-jy;const r=(keys.KeyD?1:0)-(keys.KeyA?1:0)+jx;const v=new THREE.Vector3(r,0,-f);if(v.lengthSq()>1)v.normalize();v.applyAxisAngle(new THREE.Vector3(0,1,0),yaw).multiplyScalar(2.5*dt);player.position.add(v);player.position.x=THREE.MathUtils.clamp(player.position.x,-4.65,4.65);player.position.z=THREE.MathUtils.clamp(player.position.z,-4.35,4.35);syncAvatar(v.lengthSq()>.00001,dt);const s=nearestStation();if(s&&hint)hint.textContent=`${s.name} — اضغط تفاعل`;else if(hint)hint.textContent=`النظام ${stage+1}/5 — ${stageNames[stage]}`;
   } else if(xrMode==='vr') {
     moveVR(dt);
   } else if(xrMode==='ar') {
