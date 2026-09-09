@@ -1,0 +1,39 @@
+name: Repair and Run Premium Room1
+"on":
+  push:
+    branches: [main]
+permissions:
+  contents: write
+  actions: write
+jobs:
+  repair-run:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Repair premium workflow triggers
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/import-premium-room1-models.yml')
+          s=p.read_text()
+          if s.startswith('name: Import Premium Room1 Models\non:\n'):
+              s=s.replace('name: Import Premium Room1 Models\non:\n','name: Import Premium Room1 Models\n"on":\n',1)
+          s=s.replace('  workflow_dispatch:\n','  workflow_dispatch: {}\n',1)
+          p.write_text(s)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/import-premium-room1-models.yml
+          if ! git diff --cached --quiet; then
+            git commit -m 'Repair premium room 1 workflow trigger'
+            git push
+          fi
+      - name: Dispatch premium import
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sleep 3
+          gh workflow run import-premium-room1-models.yml --repo "$GITHUB_REPOSITORY" --ref main
