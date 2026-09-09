@@ -1,4 +1,4 @@
-name: Premium Room 1 Model Merge
+name: Premium Room 1 Model Merge v2
 on:
   push:
     paths:
