@@ -1,1 +1,1 @@
-run 2026-09-09 direct premium room1 conversion
+run 2026-09-09 fixed premium room1 conversion v2
