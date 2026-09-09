@@ -1,0 +1,71 @@
+name: Fix Room1 Numbers And Loading
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/triggers/fix-room1-loading.txt'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Patch loading screen and room 1 numbers
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # Loading overlay in index.html
+          p=Path('index.html')
+          s=p.read_text()
+          marker='<body>'
+          loader='''<body><div id="loadingScreen"><div class="loadingCard"><div class="loadingLogo">THE SHELTER</div><div class="loadingText" id="loadingText">جاري تجهيز الملجأ...</div><div class="loadingTrack"><div id="loadingBar"></div></div><div class="loadingPct" id="loadingPct">0%</div></div></div>'''
+          if 'id="loadingScreen"' not in s:
+              s=s.replace(marker,loader,1)
+              p.write_text(s)
+
+          # Loader styles
+          p=Path('game.css')
+          s=p.read_text()
+          css='''\n#loadingScreen{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 40%,#172127 0,#090c0f 58%,#030405 100%);transition:opacity .45s ease,visibility .45s ease}#loadingScreen.done{opacity:0;visibility:hidden;pointer-events:none}.loadingCard{width:min(86vw,430px);padding:28px 26px;border:1px solid #8fb8c633;background:#0c1217e8;border-radius:18px;box-shadow:0 24px 70px #000b,inset 0 0 40px #73d9ff0d;text-align:center}.loadingLogo{font-weight:900;letter-spacing:.25em;font-size:clamp(22px,5vw,34px);color:#e7f7ff;text-shadow:0 0 24px #79dcff66}.loadingText{margin-top:14px;font-size:13px;color:#b9cbd3}.loadingTrack{height:8px;margin-top:18px;border-radius:999px;background:#182128;overflow:hidden;border:1px solid #ffffff12}.loadingTrack #loadingBar{height:100%;width:0;background:linear-gradient(90deg,#5aaac7,#9be7ff);box-shadow:0 0 14px #76dfff;transition:width .18s ease}.loadingPct{margin-top:8px;font-size:11px;color:#7f9aa5;font-variant-numeric:tabular-nums}\n'''
+          if '#loadingScreen{' not in s:
+              p.write_text(s+css)
+
+          # Track GLTF asset loading in main.js
+          p=Path('src/main.js')
+          s=p.read_text()
+          old="const gltf=new GLTFLoader(),Q='./assets/vendor/quaternius-scifi/Modular%20SciFi%20MegaKit%5BStandard%5D/glTF/',K='./assets/vendor/kenney-furniture/Models/GLTF%20format/';"
+          new="""const loadingScreen=document.getElementById('loadingScreen'),loadingBar=document.getElementById('loadingBar'),loadingPct=document.getElementById('loadingPct'),loadingText=document.getElementById('loadingText');const assetManager=new THREE.LoadingManager();assetManager.onStart=()=>{if(loadingScreen)loadingScreen.classList.remove('done')};assetManager.onProgress=(url,loaded,total)=>{const pct=total?Math.round(loaded/total*100):0;if(loadingBar)loadingBar.style.width=pct+'%';if(loadingPct)loadingPct.textContent=pct+'%';if(loadingText)loadingText.textContent='جاري تحميل مجسمات الغرفة...'};assetManager.onLoad=()=>{if(loadingBar)loadingBar.style.width='100%';if(loadingPct)loadingPct.textContent='100%';if(loadingText)loadingText.textContent='تم تجهيز الغرفة';setTimeout(()=>loadingScreen?.classList.add('done'),260)};assetManager.onError=url=>{console.warn('Asset failed',url);if(loadingText)loadingText.textContent='تعذر تحميل أحد المجسمات — متابعة التشغيل'};const gltf=new GLTFLoader(assetManager),Q='./assets/vendor/quaternius-scifi/Modular%20SciFi%20MegaKit%5BStandard%5D/glTF/',K='./assets/vendor/kenney-furniture/Models/GLTF%20format/';"""
+          if old in s:
+              s=s.replace(old,new,1)
+          elif 'const assetManager=new THREE.LoadingManager()' not in s:
+              raise SystemExit('GLTF loader marker not found')
+          p.write_text(s)
+
+          # Fix mirrored/upside-down numbers by separating the front face from the cylinder UVs.
+          p=Path('src/puzzles.js')
+          s=p.read_text()
+          old="const token=new THREE.Mesh(new THREE.CylinderGeometry(.58,.58,.34,10),numMat(v,i===sel));token.rotation.x=Math.PI/2;token.position.z=.18;token.userData.idx=i;g.add(token);"
+          new="""const token=new THREE.Mesh(new THREE.CylinderGeometry(.58,.58,.34,10),new THREE.MeshStandardMaterial({color:i===sel?0x8a5a22:0x343a40,metalness:.45,roughness:.35}));token.rotation.x=Math.PI/2;token.position.z=.18;token.userData.idx=i;g.add(token);const face=new THREE.Mesh(new THREE.CircleGeometry(.49,32),numMat(v,i===sel));face.position.z=.37;face.userData.idx=i;g.add(face);"""
+          if old not in s:
+              raise SystemExit('Room 1 token marker not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+      - name: Syntax checks
+        run: |
+          node --check src/main.js
+          node --check src/puzzles.js
+      - name: Commit changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html game.css src/main.js src/puzzles.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'Add asset loading screen and fix room 1 numbers'
+          git push
