@@ -1,79 +1,76 @@
 from pathlib import Path
-import re
 
-# WEB / DOM puzzles
-p=Path('src/puzzles.js')
-s=p.read_text()
+# Fix valve visual/logical direction mapping in web and VR,
+# then make AR use a Drifting-style place-first/play-after workflow.
 
-pat=re.compile(r" function valves\(\)\{.*?\}\n function circuit\(\)",re.S)
-repl=r''' function valves(){let a=[0,1,2,3];const cells=[{x:0,y:0},{x:0,y:1},{x:1,y:1},{x:1,y:0}],pos=[[-1.55,-1.05],[-1.55,1.05],[1.55,1.05],[1.55,-1.05]],byPos={'0,0':0,'0,1':1,'1,1':2,'1,0':3},vec=[[0,1],[1,0],[0,-1],[-1,0]],opp=d=>(d+2)%4,dirs=r=>[[0,1],[1,2],[2,3],[3,0]][r];const flow=()=>{const seen=new Set(),stack=[];if(dirs(a[0]).includes(3)){seen.add(0);stack.push(0)}while(stack.length){const i=stack.pop();for(const d of dirs(a[i])){const j=byPos[`${cells[i].x+vec[d][0]},${cells[i].y+vec[d][1]}`];if(j===undefined||!dirs(a[j]).includes(opp(d))||seen.has(j))continue;seen.add(j);stack.push(j)}}return{seen,solved:seen.has(3)&&dirs(a[3]).includes(1)}};const draw=()=>stage((s,h)=>{const f=flow(),pm=on=>new THREE.MeshStandardMaterial({color:on?0x39d7ff:0x244958,emissive:on?0x137fa7:0x000000,emissiveIntensity:on?2.1:0,metalness:.5,roughness:.25});const source=new THREE.Mesh(new THREE.CylinderGeometry(.58,.58,.28,28),new THREE.MeshStandardMaterial({color:0x69e9ff,emissive:0x14799d,emissiveIntensity:3}));source.rotation.x=Math.PI/2;source.position.set(-3.15,-1.05,0);s.add(source);const src=new THREE.Mesh(new THREE.CylinderGeometry(.18,.18,.9,18),pm(f.seen.has(0)));src.rotation.z=Math.PI/2;src.position.set(-2.42,-1.05,0);s.add(src);const sink=new THREE.Mesh(new THREE.BoxGeometry(.82,.82,.5),new THREE.MeshStandardMaterial({color:f.solved?0x6dff9b:0x28343a,emissive:f.solved?0x168846:0,emissiveIntensity:f.solved?3:0}));sink.position.set(3.15,-1.05,0);s.add(sink);const out=new THREE.Mesh(new THREE.CylinderGeometry(.18,.18,.9,18),pm(f.solved));out.rotation.z=Math.PI/2;out.position.set(2.42,-1.05,0);s.add(out);a.forEach((r,i)=>{const g=new THREE.Group();g.userData.idx=i;g.position.set(pos[i][0],pos[i][1],0);const pad=new THREE.Mesh(new THREE.BoxGeometry(1.72,1.72,.2),dark());pad.position.z=-.15;pad.userData.idx=i;g.add(pad);const matp=pm(f.seen.has(i)),tube=(x,y,len,rz)=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(.2,.2,len,18),matp);m.position.set(x,y,0);m.rotation.z=rz;m.userData.idx=i;g.add(m)};tube(.38,0,.8,Math.PI/2);tube(0,.38,.8,0);const elbow=new THREE.Mesh(new THREE.SphereGeometry(.23,16,12),matp);elbow.userData.idx=i;g.add(elbow);g.rotation.z=r*Math.PI/2;const wheel=new THREE.Mesh(new THREE.TorusGeometry(.34,.07,14,30),new THREE.MeshStandardMaterial({color:0xc73535,metalness:.6,roughness:.28}));wheel.position.z=.27;wheel.userData.idx=i;g.add(wheel);for(let k=0;k<4;k++){const sp=new THREE.Mesh(new THREE.BoxGeometry(.55,.055,.055),metal());sp.position.z=.27;sp.rotation.z=k*Math.PI/2;sp.userData.idx=i;g.add(sp)}const marker=new THREE.Mesh(new THREE.SphereGeometry(.065,12,9),new THREE.MeshStandardMaterial({color:0xffdb62,emissive:0x845800,emissiveIntensity:3}));marker.position.set(0,.32,.31);marker.userData.idx=i;g.add(marker);if(f.seen.has(i)){const glow=new THREE.PointLight(0x46dcff,2.6,2.4,2);glow.position.set(0,0,.7);g.add(glow)}s.add(g);g.traverse(o=>{if(o.isMesh)h.push(o)})})},i=>{a[i]=(a[i]+1)%4;const f=flow();status.textContent=f.solved?'اكتمل مسار الماء':'تلميح: صِل الماء من المصدر الأزرق إلى المخرج';status.className='status';if(f.solved){complete();return}draw()});draw()}
- function circuit()'''
-s,n=pat.subn(repl,s,count=1)
-if n!=1: raise SystemExit('web valves block not found')
-
-pat=re.compile(r" function open\(\)\{.*?\}\n document\.getElementById\('use'\)\.onclick=open",re.S)
-repl=r''' function open(){if(canOpen&&!canOpen()){status.textContent='اقترب من لوحة الباب للتفاعل';status.className='status';return false}const r=getRoom(),t=types[r],texts={blocks:'رتّب المكعبات المجسمة من 1 إلى 9.',pipes:'اضغط على قطع الأنابيب المجسمة لتدويرها.',valves:'دوّر وحدات الأنابيب حتى يصل الماء من البداية إلى النهاية.',circuit:'حرّك مفاتيح الطاقة حتى تصل للوضع الصحيح.',jigsaw:'أعد تركيب الصورة.',pressure:'اضبط مستويات الضغط الثلاثة.',symbols:'اضغط الرموز بالتسلسل الصحيح.',frequency:'اضبط ترددات أجهزة الاستقبال.',keypad:'أدخل رمز فتح بوابة النقل.',escape:'نفّذ إجراءات الخروج إلى السطح بالترتيب.'},hints={blocks:'ابدأ بالصف العلوي: 1 ثم 2 ثم 3.',pipes:'ابدأ من الحواف وابحث عن مسار متصل.',valves:'صِل المصدر الأزرق بالمخرج؛ القطع التي يصلها الماء تضيء.',circuit:'كل مفتاح يعمل يضيء باللون الأخضر.',jigsaw:'ابدأ بالزوايا والحواف.',pressure:'راقب مؤشر الحالة لكل عمود.',symbols:'إذا أخطأت يبدأ التسلسل من جديد.',frequency:'كل قرص يمر بخمس وضعيات.',keypad:'الرمز مكوّن من أربعة أرقام.',escape:'نفّذ الخطوات بالترتيب من الأعلى للأسفل.'};modal.classList.add('show');title.textContent=`لغز الغرفة ${r+1}`;desc.textContent=texts[t];status.textContent=solved[r]?'هذا اللغز محلول مسبقًا':'تلميح: '+hints[t];status.className=solved[r]?'status solved':'status';({blocks,pipes,valves,circuit,jigsaw,pressure,symbols,frequency,keypad,escape:escapePuzzle}[t])()}
- document.getElementById('use').onclick=open'''
-s,n=pat.subn(repl,s,count=1)
-if n!=1: raise SystemExit('web open block not found')
+# --- Web valve puzzle ---
+p = Path('src/puzzles.js')
+s = p.read_text()
+old = "dirs=r=>[[0,1],[1,2],[2,3],[3,0]][r]"
+new = "dirs=r=>[[0,1],[3,0],[2,3],[1,2]][r]"
+if old not in s:
+    raise SystemExit('web valve direction map not found')
+s = s.replace(old, new, 1)
 p.write_text(s)
 
-# XR / shared scene
-p=Path('src/main.js')
-s=p.read_text()
+# --- XR / AR ---
+p = Path('src/main.js')
+s = p.read_text()
 
-marker="const doorPoint=new THREE.Vector3(4.15,.9,-2.55);"
-helper="const arPlayerLocal=new THREE.Vector3(-.3,.12,1.9),arPlayerWorld=new THREE.Vector3(),arPlayerAxis=new THREE.Vector3(0,1,0);function syncArPlayer(){if(xrKind!=='ar'||!root)return;arPlayerWorld.copy(arPlayerLocal).multiplyScalar(arScale).applyAxisAngle(arPlayerAxis,arYaw).add(root.position);player.position.copy(arPlayerWorld);player.scale.setScalar(arScale);player.rotation.y=arYaw;player.visible=arPlaced}"
-if helper not in s:
-    if marker not in s: raise SystemExit('doorPoint marker not found')
-    s=s.replace(marker,helper+'\n'+marker,1)
+# VR valve puzzle uses the same visual rotation convention as web.
+old = "dirs=r=>[[0,1],[1,2],[2,3],[3,0]][r]"
+new = "dirs=r=>[[0,1],[3,0],[2,3],[1,2]][r]"
+if old not in s:
+    raise SystemExit('VR valve direction map not found')
+s = s.replace(old, new, 1)
 
-old="function setArScale(v){arScale=THREE.MathUtils.clamp(v,.12,.9);if(root&&xrKind==='ar')root.scale.setScalar(arScale)}function setArYaw(v){arYaw=v;if(root&&xrKind==='ar')root.rotation.set(0,arYaw,0)}"
-new="function setArScale(v){arScale=THREE.MathUtils.clamp(v,.12,.9);if(root&&xrKind==='ar')root.scale.setScalar(arScale);syncArPlayer()}function setArYaw(v){arYaw=v;if(root&&xrKind==='ar')root.rotation.set(0,arYaw,0);syncArPlayer()}"
-if old not in s: raise SystemExit('AR scale/yaw block not found')
-s=s.replace(old,new,1)
+# Replace the fixed AR character pose with a mutable local player position.
+old = "const arPlayerLocal=new THREE.Vector3(-.3,.12,1.9),arPlayerWorld=new THREE.Vector3(),arPlayerAxis=new THREE.Vector3(0,1,0);function syncArPlayer(){if(xrKind!=='ar'||!root)return;arPlayerWorld.copy(arPlayerLocal).multiplyScalar(arScale).applyAxisAngle(arPlayerAxis,arYaw).add(root.position);player.position.copy(arPlayerWorld);player.scale.setScalar(arScale);player.rotation.y=arYaw;player.visible=arPlaced}"
+new = "const arPlayerLocal=new THREE.Vector3(-.3,.12,1.9),arPlayerWorld=new THREE.Vector3(),arPlayerAxis=new THREE.Vector3(0,1,0),arLocalForward=new THREE.Vector3(),arLocalRight=new THREE.Vector3();let arPlayerFacing=0;function syncArPlayer(){if(xrKind!=='ar'||!root)return;arPlayerWorld.copy(arPlayerLocal).multiplyScalar(arScale).applyAxisAngle(arPlayerAxis,arYaw).add(root.position);player.position.copy(arPlayerWorld);player.scale.setScalar(arScale);player.rotation.y=arYaw+arPlayerFacing;player.visible=arPlaced}function resetArPlayer(){arPlayerLocal.set(-.3,.12,1.9);arPlayerFacing=0;syncArPlayer()}function moveArPlayer(dx,dz,dt){const nx=THREE.MathUtils.clamp(arPlayerLocal.x+dx,-7,6.8),nz=THREE.MathUtils.clamp(arPlayerLocal.z+dz,-2.55,2.75);let moved=false;if(!hit(nx,arPlayerLocal.z)){arPlayerLocal.x=nx;moved=true}if(!hit(arPlayerLocal.x,nz)){arPlayerLocal.z=nz;moved=true}if(moved){arPlayerFacing=Math.atan2(dx,dz);syncArPlayer();const sp=Math.hypot(dx,dz)/Math.max(dt,.001);if(model&&sp>.05){walkT+=dt*7;walk(sp)}}}"
+if old not in s:
+    raise SystemExit('AR player helper block not found')
+s = s.replace(old, new, 1)
 
-old="document.body.classList.add('xr-active');player.visible=false;try{puzzles.close?.()}catch(e){};const ub=document.getElementById('use');if(ub)ub.style.display='none';if(xrKind==='ar'){"
-new="document.body.classList.add('xr-active');player.visible=xrKind==='ar'&&arPlaced;try{puzzles.close?.()}catch(e){};const ub=document.getElementById('use');if(ub)ub.style.display=xrKind==='ar'?'':'none';if(xrKind==='ar'){"
-if old not in s: raise SystemExit('sessionstart block not found')
-s=s.replace(old,new,1)
+# Drifting-style placement: preview first, explicit confirm, then freeze the shelter.
+old = "const arControls=document.createElement('div');arControls.id='arControls';arControls.innerHTML='<button id=arRotL>↺</button><button id=arMinus>−</button><button id=arPlace>تحديد الموقع</button><button id=arPlus>+</button><button id=arRotR>↻</button>';"
+new = "const arControls=document.createElement('div');arControls.id='arControls';arControls.innerHTML='<button id=arRotL>↺</button><button id=arMinus>−</button><button id=arPlace>تثبيت الموقع</button><button id=arPlus>+</button><button id=arRotR>↻</button>';"
+if old not in s:
+    raise SystemExit('AR controls markup not found')
+s = s.replace(old, new, 1)
 
-old="scene.background=desktopBg;scene.fog=desktopFog;player.visible=true;arReticle.visible=false;"
-new="scene.background=desktopBg;scene.fog=desktopFog;player.visible=true;player.scale.setScalar(1);player.rotation.y=0;arReticle.visible=false;"
-if old not in s: raise SystemExit('sessionend player block not found')
-s=s.replace(old,new,1)
+old = "document.getElementById('arMinus').onclick=()=>setArScale(arScale-.05);document.getElementById('arPlus').onclick=()=>setArScale(arScale+.05);document.getElementById('arRotL').onclick=()=>setArYaw(arYaw-Math.PI/12);document.getElementById('arRotR').onclick=()=>setArYaw(arYaw+Math.PI/12);document.getElementById('arPlace').onclick=()=>{arPlaced=false;arReticle.visible=false;if(root)root.visible=false};function setArScale(v){arScale=THREE.MathUtils.clamp(v,.12,.9);if(root&&xrKind==='ar')root.scale.setScalar(arScale);syncArPlayer()}function setArYaw(v){arYaw=v;if(root&&xrKind==='ar')root.rotation.set(0,arYaw,0);syncArPlayer()}"
+new = "document.getElementById('arMinus').onclick=()=>{if(!arPlaced)setArScale(arScale-.05)};document.getElementById('arPlus').onclick=()=>{if(!arPlaced)setArScale(arScale+.05)};document.getElementById('arRotL').onclick=()=>{if(!arPlaced)setArYaw(arYaw-Math.PI/12)};document.getElementById('arRotR').onclick=()=>{if(!arPlaced)setArYaw(arYaw+Math.PI/12)};function setArScale(v){arScale=THREE.MathUtils.clamp(v,.12,.9);if(root&&xrKind==='ar')root.scale.setScalar(arScale);syncArPlayer()}function setArYaw(v){arYaw=v;if(root&&xrKind==='ar')root.rotation.set(0,arYaw,0);syncArPlayer()}function confirmArPlacement(){if(xrKind!=='ar'||!arReticle.visible||!root)return false;const pos=new THREE.Vector3(),q=new THREE.Quaternion(),sc=new THREE.Vector3(),camForward=new THREE.Vector3();arReticle.matrix.decompose(pos,q,sc);xrCamera.getWorldDirection(camForward);camForward.y=0;if(camForward.lengthSq()>.0001){camForward.normalize();arYaw=Math.atan2(camForward.x,camForward.z)}root.position.copy(pos);root.rotation.set(0,arYaw,0);root.scale.setScalar(arScale);root.visible=true;arPlaced=true;resetArPlayer();arReticle.visible=false;document.getElementById('arPlace').textContent='إعادة التحديد';return true}function resetArPlacement(){arPlaced=false;player.visible=false;resetArPlayer();if(root)root.visible=false;arReticle.visible=false;document.getElementById('arPlace').textContent='تثبيت الموقع'}document.getElementById('arPlace').onclick=()=>{if(arPlaced)resetArPlacement();else confirmArPlacement()};"
+if old not in s:
+    raise SystemExit('AR controls behavior block not found')
+s = s.replace(old, new, 1)
 
-old="root.scale.setScalar(arScale);root.visible=true;arPlaced=true}return}"
-new="root.scale.setScalar(arScale);root.visible=true;arPlaced=true;syncArPlayer()}return}"
-if old not in s: raise SystemExit('AR placement block not found')
-s=s.replace(old,new,1)
+# Start AR in placement mode with a hidden player; after placement the shelter remains fixed.
+old = "if(xrKind==='ar'){scene.background=null;scene.fog=null;arPlaced=false;arControls.style.display='flex';if(root){root.visible=false;root.scale.setScalar(arScale)}"
+new = "if(xrKind==='ar'){scene.background=null;scene.fog=null;arPlaced=false;arControls.style.display='flex';document.getElementById('arPlace').textContent='تثبيت الموقع';resetArPlayer();player.visible=false;if(root){root.visible=false;root.scale.setScalar(arScale)}"
+if old not in s:
+    raise SystemExit('AR sessionstart block not found')
+s = s.replace(old, new, 1)
 
-old="if(xrKind==='ar'){root.scale.setScalar(arScale);root.visible=arPlaced}else root.visible=true;player.position.set(-.3,.12,1.9);syncUI()"
-new="if(xrKind==='ar'){root.scale.setScalar(arScale);root.visible=arPlaced;syncArPlayer()}else{root.visible=true;player.scale.setScalar(1);player.position.set(-.3,.12,1.9)}syncUI()"
-if old not in s: raise SystemExit('build AR block not found')
-s=s.replace(old,new,1)
+# Controller trigger confirms placement through the same code path as the UI button.
+old = "if(xrKind==='ar'){if(arReticle.visible&&root){const pos=new THREE.Vector3(),q=new THREE.Quaternion(),sc=new THREE.Vector3(),camPos=new THREE.Vector3();arReticle.matrix.decompose(pos,q,sc);xrCamera.getWorldPosition(camPos);arYaw=Math.atan2(camPos.x-pos.x,camPos.z-pos.z);root.position.copy(pos);root.rotation.set(0,arYaw,0);root.scale.setScalar(arScale);root.visible=true;arPlaced=true;syncArPlayer()}return}"
+new = "if(xrKind==='ar'){if(!arPlaced)confirmArPlacement();return}"
+if old not in s:
+    raise SystemExit('AR select placement block not found')
+s = s.replace(old, new, 1)
 
-old="const title=new THREE.Mesh(new THREE.PlaneGeometry(2.25,.28),vrText(`ROOM ${roomIndex+1} PUZZLE`));title.position.set(0,.82,.01);vrPuzzle.add(title);const type=vrTypes[roomIndex];vrState={type};"
-new="const title=new THREE.Mesh(new THREE.PlaneGeometry(2.25,.28),vrText(`ROOM ${roomIndex+1} PUZZLE`));title.position.set(0,.82,.01);vrPuzzle.add(title);const type=vrTypes[roomIndex],vrHints={blocks:'HINT: 1-2-3 TOP ROW',pipes:'HINT: CONNECT THE EDGES',valves:'HINT: SOURCE TO EXIT',circuit:'HINT: GREEN MEANS ON',jigsaw:'HINT: START WITH EDGES',pressure:'HINT: MATCH ALL LEVELS',symbols:'HINT: WRONG RESETS',frequency:'HINT: 5 POSITIONS',keypad:'HINT: 4 DIGITS',escape:'HINT: TOP TO BOTTOM'};const hint=new THREE.Mesh(new THREE.PlaneGeometry(2.3,.18),vrText(vrHints[type],900,160));hint.position.set(0,.61,.015);vrPuzzle.add(hint);vrState={type};"
-if old not in s: raise SystemExit('VR title block not found')
-s=s.replace(old,new,1)
+# Preserve local character position across AR room rebuilds, but reset it when entering a new room.
+old = "if(xrKind==='ar'){root.scale.setScalar(arScale);root.visible=arPlaced;syncArPlayer()}else{root.visible=true;player.scale.setScalar(1);player.position.set(-.3,.12,1.9)}syncUI()"
+new = "if(xrKind==='ar'){root.scale.setScalar(arScale);root.visible=arPlaced;resetArPlayer()}else{root.visible=true;player.scale.setScalar(1);player.position.set(-.3,.12,1.9)}syncUI()"
+if old not in s:
+    raise SystemExit('AR build block not found')
+s = s.replace(old, new, 1)
 
-old="else if(type==='valves'){vrState.a=[0,0,0];vrState.target=[2,1,3];drawVrValves()}"
-new="else if(type==='valves'){vrState.a=[0,1,2,3];drawVrValves()}"
-if old not in s: raise SystemExit('VR valve init not found')
-s=s.replace(old,new,1)
-
-pat=re.compile(r"function drawVrValves\(\)\{.*?\}\nfunction drawVrPressure\(\)",re.S)
-repl=r'''function vrValveFlow(){const cells=[{x:0,y:0},{x:0,y:1},{x:1,y:1},{x:1,y:0}],by={'0,0':0,'0,1':1,'1,1':2,'1,0':3},vec=[[0,1],[1,0],[0,-1],[-1,0]],dirs=r=>[[0,1],[1,2],[2,3],[3,0]][r],opp=d=>(d+2)%4,seen=new Set(),stack=[];if(dirs(vrState.a[0]).includes(3)){seen.add(0);stack.push(0)}while(stack.length){const i=stack.pop();for(const d of dirs(vrState.a[i])){const j=by[`${cells[i].x+vec[d][0]},${cells[i].y+vec[d][1]}`];if(j===undefined||!dirs(vrState.a[j]).includes(opp(d))||seen.has(j))continue;seen.add(j);stack.push(j)}}return{seen,solved:seen.has(3)&&dirs(vrState.a[3]).includes(1)}}
-function drawVrValves(){clearVrItems();const f=vrValveFlow(),pos=[[-.58,-.26],[-.58,.28],[.58,.28],[.58,-.26]],pm=on=>new THREE.MeshStandardMaterial({color:on?0x38d8ff:0x27505c,emissive:on?0x157d9e:0,emissiveIntensity:on?2.5:0,metalness:.45,roughness:.25});const src=new THREE.Mesh(new THREE.SphereGeometry(.16,14,10),new THREE.MeshStandardMaterial({color:0x6feaff,emissive:0x1688aa,emissiveIntensity:3}));src.position.set(-1.02,-.26,.09);src.userData.item=true;vrPuzzle.add(src);const exit=new THREE.Mesh(new THREE.BoxGeometry(.28,.28,.12),new THREE.MeshStandardMaterial({color:f.solved?0x6dff9b:0x354147,emissive:f.solved?0x19964b:0,emissiveIntensity:f.solved?3:0}));exit.position.set(1.02,-.26,.09);exit.userData.item=true;vrPuzzle.add(exit);vrState.a.forEach((r,i)=>{const g=new THREE.Group();g.position.set(pos[i][0],pos[i][1],.08);g.rotation.z=r*Math.PI/2;g.userData.item=true;const mat=pm(f.seen.has(i)),a=new THREE.Mesh(new THREE.BoxGeometry(.42,.10,.10),mat),b=new THREE.Mesh(new THREE.BoxGeometry(.10,.42,.10),mat);a.position.x=.16;b.position.y=.16;const act=()=>{vrState.a[i]=(vrState.a[i]+1)%4;if(vrValveFlow().solved){vrFinish();return}drawVrValves()};for(const m of[a,b]){m.userData.action=act;g.add(m);vrHits.push(m)}const hub=new THREE.Mesh(new THREE.TorusGeometry(.16,.035,10,20),new THREE.MeshStandardMaterial({color:0xc83b36,metalness:.6,roughness:.3}));hub.userData.action=act;g.add(hub);vrHits.push(hub);const marker=new THREE.Mesh(new THREE.SphereGeometry(.035,10,8),new THREE.MeshStandardMaterial({color:0xffd75f,emissive:0x805400,emissiveIntensity:3}));marker.position.set(0,.15,.08);marker.userData.action=act;g.add(marker);vrHits.push(marker);if(f.seen.has(i)){const glow=new THREE.PointLight(0x45ddff,2.2,1.1,2);glow.position.z=.35;g.add(glow)}vrPuzzle.add(g)})}
-function drawVrPressure()'''
-s,n=pat.subn(repl,s,count=1)
-if n!=1: raise SystemExit('VR valves block not found')
-
-pat=re.compile(r"function drawVrCircuit\(\)\{.*?\}\nfunction xrRayPick",re.S)
-repl=r'''function drawVrCircuit(){clearVrItems();vrState.a.forEach((v,i)=>{const g=new THREE.Group();g.position.set((i-1.5)*.55,-.05,.08);g.userData.item=true;const base=new THREE.Mesh(new THREE.BoxGeometry(.4,.8,.12),new THREE.MeshStandardMaterial({color:0x292d31,metalness:.5})),lever=new THREE.Mesh(new THREE.BoxGeometry(.09,.43,.1),new THREE.MeshStandardMaterial({color:v?0x4fcf70:0x555b61}));lever.position.y=v?.12:-.12;lever.rotation.z=v?-.55:.55;const bulb=new THREE.Mesh(new THREE.SphereGeometry(.07,12,8),new THREE.MeshStandardMaterial({color:v?0x66ff99:0x3e4449,emissive:v?0x33ff77:0,emissiveIntensity:v?6:0}));bulb.position.set(0,.31,.10);const act=()=>{vrState.a[i]^=1;if(vrState.a.every((x,j)=>x===vrState.target[j])){vrFinish();return}drawVrCircuit()};for(const o of[base,lever,bulb]){o.userData.action=act;vrHits.push(o);g.add(o)}if(v){const glow=new THREE.PointLight(0x66ff99,3.5,1.2,2);glow.position.set(0,.3,.35);g.add(glow)}vrPuzzle.add(g)})}
-function xrRayPick'''
-s,n=pat.subn(repl,s,count=1)
-if n!=1: raise SystemExit('VR circuit block not found')
+# Before placement: no gameplay movement. After placement: left stick/joystick moves the character,
+# relative to the viewer but converted into the shelter's local coordinate system.
+old = "if(xrKind==='ar'){const [sx,sy]=stickAxes(right?.gamepad||left?.gamepad);if(Math.abs(sy)>.18)setArScale(arScale-sy*dt*.28);if(arPlaced&&Math.abs(sx)>.18)setArYaw(arYaw+sx*dt*1.35);return}"
+new = "if(xrKind==='ar'){if(!arPlaced)return;const [ax0,ay0]=stickAxes(left?.gamepad||right?.gamepad);let ax=Math.abs(ax0)>.14?ax0:0,ay=Math.abs(ay0)>.14?ay0:0;ax=THREE.MathUtils.clamp(ax+jx,-1,1);ay=THREE.MathUtils.clamp(ay+jy,-1,1);if(Math.abs(ax)<.08&&Math.abs(ay)<.08)return;xrCamera.getWorldDirection(arLocalForward);arLocalForward.y=0;if(arLocalForward.lengthSq()<.0001)return;arLocalForward.normalize().applyAxisAngle(arPlayerAxis,-arYaw);arLocalRight.set(arLocalForward.z,0,-arLocalForward.x);const speed=2.35,dx=(arLocalRight.x*ax+arLocalForward.x*-ay)*speed*dt,dz=(arLocalRight.z*ax+arLocalForward.z*-ay)*speed*dt;moveArPlayer(dx,dz,dt);return}"
+if old not in s:
+    raise SystemExit('AR xrMove block not found')
+s = s.replace(old, new, 1)
 
 p.write_text(s)
