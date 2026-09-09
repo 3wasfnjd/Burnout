@@ -1,0 +1,16 @@
+name: Launch Premium Room1 Conversion
+on:
+  push:
+    branches: [main]
+permissions:
+  actions: write
+  contents: read
+jobs:
+  launch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch premium model workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run import-premium-room1-models.yml --repo "$GITHUB_REPOSITORY" --ref main
