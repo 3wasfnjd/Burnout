@@ -1,16 +1,29 @@
-name: Launch Premium Room1 Conversion
+name: Merge Premium Room1 Directly
 on:
   push:
     branches: [main]
 permissions:
-  actions: write
-  contents: read
+  contents: write
 jobs:
-  launch:
+  merge:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch premium model workflow
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run import-premium-room1-models.yml --repo "$GITHUB_REPOSITORY" --ref main
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Download models and patch room 1
+        run: python3 .github/scripts/premium_room1_merge.py
+      - name: Verify syntax
+        run: node --check src/main.js
+      - name: Commit premium room 1
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/main.js assets/vendor/polyhaven
+          git diff --cached --quiet && exit 0
+          git commit -m 'Merge premium 3D model room 1'
+          git push
