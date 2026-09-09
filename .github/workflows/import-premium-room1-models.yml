@@ -1,0 +1,208 @@
+name: Import Premium Room1 Models
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/triggers/premium-room1-models.txt'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  import-and-patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Download 4K CC0 Poly Haven glTF models
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, urllib.request, urllib.parse, shutil
+
+          assets = [
+            'modular_industrial_pipes_01',
+            'industrial_wall_lamp',
+            'hanging_industrial_lamp',
+            'metal_office_desk',
+            'steel_frame_shelves_02',
+            'book_encyclopedia_set_01',
+            'wooden_candlestick',
+            'drawer_cabinet',
+          ]
+          base = pathlib.Path('assets/vendor/polyhaven')
+          base.mkdir(parents=True, exist_ok=True)
+
+          def walk(obj, trail=()):
+            if isinstance(obj, dict):
+              if isinstance(obj.get('url'), str):
+                yield trail, obj
+              for k,v in obj.items():
+                yield from walk(v, trail+(str(k),))
+            elif isinstance(obj, list):
+              for i,v in enumerate(obj):
+                yield from walk(v, trail+(str(i),))
+
+          for asset in assets:
+            out = base / asset
+            out.mkdir(parents=True, exist_ok=True)
+            with urllib.request.urlopen(f'https://api.polyhaven.com/files/{asset}', timeout=60) as r:
+              data = json.load(r)
+            candidates = list(walk(data))
+            # Prefer glTF 4K package; fall back to 2K/1K only if 4K is unavailable.
+            chosen = []
+            for res in ('4k','2k','1k'):
+              chosen = [(trail,node) for trail,node in candidates if 'gltf' in '/'.join(trail).lower() and res in '/'.join(trail).lower()]
+              if any(str(n.get('url','')).lower().endswith('.gltf') for _,n in chosen):
+                break
+            if not chosen:
+              raise SystemExit(f'No glTF package found for {asset}')
+            # Keep only actual package files and deduplicate by URL.
+            seen=set(); files=[]
+            for trail,node in chosen:
+              url=node['url']
+              if url in seen: continue
+              seen.add(url)
+              path=urllib.parse.urlparse(url).path
+              ext=pathlib.Path(path).suffix.lower()
+              if ext not in {'.gltf','.bin','.png','.jpg','.jpeg','.webp','.ktx2'}: continue
+              files.append((trail,url))
+            if not files:
+              raise SystemExit(f'No downloadable glTF files for {asset}')
+            roots=[]
+            for trail,url in files:
+              name=pathlib.Path(urllib.parse.urlparse(url).path).name
+              dest=out/name
+              if not dest.exists():
+                print('download',asset,name)
+                urllib.request.urlretrieve(url,dest)
+              if dest.suffix.lower()=='.gltf': roots.append(dest)
+            if not roots:
+              raise SystemExit(f'No root glTF for {asset}')
+            # Prefer a root whose filename resembles the asset id.
+            root=sorted(roots,key=lambda p:(asset.lower() not in p.name.lower(),len(p.name)))[0]
+            stable=out/'model.gltf'
+            if root.resolve()!=stable.resolve(): shutil.copy2(root,stable)
+          PY
+      - name: Patch room 1 to model-only visible geometry
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/main.js')
+          s=p.read_text()
+
+          # Add Poly Haven loader helpers after the existing Kenney loader helper.
+          anchor="async function kprop(f,x,y,z,s=1,r=0,hit=false,w=1,d=1){"
+          i=s.find(anchor)
+          if i<0: raise SystemExit('kprop anchor missing')
+          # find the end of kprop by using the known next function marker
+          marker='\nfunction shell(i)'
+          j=s.find(marker,i)
+          if j<0: raise SystemExit('shell marker missing')
+          helper="""
+const PH='./assets/vendor/polyhaven/';
+async function phfit(asset,x,y,z,w,h,d,ry=0,s=false){
+ const target=root;
+ try{
+  const a=await gltf.loadAsync(PH+asset+'/model.gltf'),o=a.scene;
+  o.rotation.y=ry;o.updateMatrixWorld(true);
+  let b=new THREE.Box3().setFromObject(o),sz=b.getSize(new THREE.Vector3());
+  o.scale.set(w/Math.max(sz.x,.001),h/Math.max(sz.y,.001),d/Math.max(sz.z,.001));
+  o.updateMatrixWorld(true);b=new THREE.Box3().setFromObject(o);
+  const c=b.getCenter(new THREE.Vector3());o.position.set(x-c.x,y-b.min.y,z-c.z);
+  o.traverse(n=>{if(n.isMesh){n.castShadow=true;n.receiveShadow=true}});
+  if(target&&target.parent)target.add(o);if(s)solid(x,z,w,d);return o
+ }catch(e){console.warn('Poly Haven asset failed',asset,e)}
+}
+function phFixture(asset,x,y,z,w,h,d,color=0xffc27a,power=4,distance=5,ry=0){
+ phfit(asset,x,y,z,w,h,d,ry,false);
+ const l=new THREE.PointLight(color,power,distance,1.7);l.position.set(x,y,z+.16);l.castShadow=true;l.shadow.mapSize.set(512,512);root.add(l);return l
+}
+"""
+          if "const PH='./assets/vendor/polyhaven/'" not in s:
+            s=s[:j]+helper+s[j:]
+
+          # Replace room 1 shell branch. Only imported models are visible; collision remains data-only.
+          shell=s.index('function shell(i)')
+          st=s.index('if(i===0){',shell)
+          en=s.index('return}',st)+len('return}')
+          shell_new="""if(i===0){
+ // Premium bunker shell: all visible surfaces are imported meshes.
+ for(let x=-6.45;x<=6.45;x+=2.15)for(let z=-2.55;z<=2.55;z+=1.70)qfit('Platforms/Platform_DarkPlates.gltf',x,.02,z,2.08,.16,1.62,0,false);
+ for(let x=-6.35;x<=3.05;x+=2.20){qfit('Walls/WallAstra_Straight.gltf',x,.08,-3.48,2.16,4.48,.40);qfit('Walls/BottomMetal_Straight.gltf',x,.08,-3.20,2.16,.42,.30)}
+ for(let z=-2.42;z<=2.42;z+=1.62){qfit('Walls/WallAstra_Straight.gltf',-7.58,.08,z,1.58,4.48,.40,Math.PI/2);qfit('Walls/BottomMetal_Straight.gltf',-7.30,.08,z,1.58,.42,.30,Math.PI/2)}
+ for(let x=-6.45;x<=5.25;x+=2.15)for(let z=-2.45;z<=1.05;z+=1.75)qfit('Platforms/Platform_Metal2.gltf',x,4.28,z,2.08,.12,1.65,0,false);
+ qfit('Walls/TopCables_Straight_Hanging.gltf',-4.3,3.95,-3.10,2.15,.66,.52);qfit('Walls/TopCables_Straight_Hanging.gltf',-2.0,3.95,-3.10,2.15,.66,.52);qfit('Walls/TopCables_Straight_Hanging.gltf',.3,3.95,-3.10,2.15,.66,.52);
+ // Invisible collision boundaries only; no primitive meshes are rendered.
+ solid(-7.72,0,.18,8.1);solid(0,-3.72,15.2,.18);
+ phFixture('industrial_wall_lamp',-5.15,3.05,-3.02,.62,.92,.48,0xffb66e,5.4,5.2,0);
+ phFixture('industrial_wall_lamp',1.35,3.05,-3.02,.62,.92,.48,0xffb66e,5.0,5.0,0);
+ phFixture('hanging_industrial_lamp',-1.15,3.18,.35,.82,1.22,.82,0xffd39a,5.8,5.6,0);
+ return}"""
+          s=s[:st]+shell_new+s[en:]
+
+          # Replace room 1 dressing branch with imported models only.
+          dress=s.index('function dress(i)')
+          st=s.index('if(i===0){',dress)
+          en=s.index('}else if(i===1)',st)+1
+          dress_new="""if(i===0){
+ // Blast door: imported frame, metal door and access terminal.
+ qfit('Platforms/Door_Frame_SquareTall.gltf',5.55,.08,-3.18,3.55,4.35,.88,0,true);
+ qfit('Platforms/Door_Metal.gltf',5.55,.22,-2.86,2.62,3.48,.38,0,true);
+ qfit('Props/Prop_AccessPoint.gltf',3.92,.72,-2.73,.82,1.18,.34,0,false);
+ phFixture('industrial_wall_lamp',5.55,3.72,-2.62,.58,.86,.46,0xffa55d,6.2,5.0,0);
+
+ // Realistic furniture and scene dressing from Poly Haven.
+ phfit('metal_office_desk',-4.55,.08,-1.72,2.45,1.02,1.18,0,true);
+ phfit('steel_frame_shelves_02',-6.35,.08,-2.48,2.05,2.95,.64,0,true);
+ phfit('drawer_cabinet',2.58,.08,-2.35,1.50,2.20,.70,0,true);
+ phfit('book_encyclopedia_set_01',-6.28,1.18,-2.02,1.38,.56,.42,0,false);
+ phfit('book_encyclopedia_set_01',-6.30,2.02,-2.03,1.22,.50,.42,0,false);
+ phfit('wooden_candlestick',-3.78,1.02,-1.48,.20,.50,.20,0,false);
+ const candleGlow=new THREE.PointLight(0xff8b43,1.8,2.2,2);candleGlow.position.set(-3.78,1.48,-1.45);root.add(candleGlow);
+
+ // High-detail industrial pipe assembly replaces procedural cylinders.
+ phfit('modular_industrial_pipes_01',-.15,.08,-2.78,4.65,3.10,.82,0,false);
+ // Keep only imported kit props for storage clutter.
+ qfit('Props/Prop_Chest.gltf',-5.75,.08,2.18,1.70,.92,.90,0,true);
+ qfit('Props/Prop_Crate4.gltf',-3.72,.08,2.40,.92,.78,.92,.12,true);
+ qfit('Props/Prop_Barrel_Large.gltf',2.85,.08,2.25,.78,1.30,.78,0,true);
+ phFixture('hanging_industrial_lamp',-4.10,3.10,.58,.78,1.18,.78,0xffcf8c,4.8,4.6,0);
+ phFixture('hanging_industrial_lamp',1.90,3.14,.58,.78,1.18,.78,0xffcf8c,4.8,4.6,0);
+ }"""
+          s=s[:st]+dress_new+s[en:]
+
+          p.write_text(s)
+          PY
+      - name: Syntax check
+        run: node --check src/main.js
+      - name: Record asset license sources
+        run: |
+          mkdir -p assets/vendor/polyhaven
+          cat > assets/vendor/polyhaven/README.md <<'EOF'
+          # Poly Haven assets used by The Shelter
+          All assets in this folder are downloaded from Poly Haven under the CC0 license.
+
+          Imported in 4K glTF where available:
+          - modular_industrial_pipes_01
+          - industrial_wall_lamp
+          - hanging_industrial_lamp
+          - metal_office_desk
+          - steel_frame_shelves_02
+          - book_encyclopedia_set_01
+          - wooden_candlestick
+          - drawer_cabinet
+
+          Source: https://polyhaven.com/
+          License: https://polyhaven.com/license
+          EOF
+      - name: Commit premium model conversion
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/main.js assets/vendor/polyhaven
+          git diff --cached --quiet && exit 0
+          git commit -m 'Replace room 1 primitives with premium 3D models'
+          git push
