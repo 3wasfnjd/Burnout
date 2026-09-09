@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# One-shot floor texture mapping patch. Re-triggered after the latest main update.
 path = Path('src/bunker17.js')
 s = path.read_text(encoding='utf-8')
 
