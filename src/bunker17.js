@@ -14,7 +14,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.18;
+renderer.toneMappingExposure = 1.42;
 renderer.xr.enabled = true;
 renderer.xr.setReferenceSpaceType('local-floor');
 document.body.prepend(renderer.domElement);
@@ -50,7 +50,7 @@ assetManager.onLoad = () => {
 setTimeout(() => loadingScreen?.classList.add('done'), 12000);
 
 async function loadModel(url) {
-  if (!cache.has(url)) cache.set(url, loader.loadAsync(url));
+  if (!cache.has(url)) cache.set(url, loader.loadAsync(url).catch(e=>{ cache.delete(url); throw e; }));
   const gltf = await cache.get(url);
   return gltf.scene.clone(true);
 }
@@ -124,11 +124,11 @@ const paths = {
 const emergency = new THREE.PointLight(0xff2b20, 3.5, 11, 2);
 emergency.position.set(0, 3.55, 0.5);
 room.add(emergency);
-const ambient = new THREE.HemisphereLight(0x3d4d55, 0x080808, 0.16);
+const ambient = new THREE.HemisphereLight(0x9aabb2, 0x17130f, 0.72);
 scene.add(ambient);
 const mainLights = [];
 for (const p of [[-3.8,3.25,0],[0,3.25,0],[3.8,3.25,0]]) {
-  const l = new THREE.PointLight(0xffd6a3, 0, 8, 1.9);
+  const l = new THREE.PointLight(0xffd6a3, 1.15, 10, 1.7);
   l.position.set(...p); l.castShadow = true; l.shadow.mapSize.set(512,512); room.add(l); mainLights.push(l);
 }
 const consoleGlow = new THREE.PointLight(0x54d7bf, 0.25, 4, 2);
@@ -187,7 +187,7 @@ const status = document.getElementById('status');
 document.getElementById('close')?.addEventListener('click',()=>modal?.classList.remove('show'));
 
 function setStage(n){ stage=n; if(hint) hint.textContent=`النظام ${n+1}/5 — ${stageNames[n]}`; }
-function solve(n){ completed[n]=true; if(n===0){ emergency.intensity=.8; mainLights.forEach(l=>l.intensity=4.4); }
+function solve(n){ completed[n]=true; if(n===0){ emergency.intensity=.45; ambient.intensity=1.05; mainLights.forEach(l=>l.intensity=5.2); }
   if(n===1){ consoleGlow.intensity=.8; }
   if(n===3){ doorLight.color.set(0xffb12f); doorLight.intensity=3; }
   if(n===4){ doorLight.color.set(0x55ff9a); doorLight.intensity=4.5; }
@@ -210,38 +210,45 @@ function openPuzzle(s){
   if(s.stage===4) doorPuzzle();
 }
 
+function finishPuzzle(n, message){
+  status.textContent=message;
+  if(!completed[n]) solve(n);
+}
+
 function powerPuzzle(){
-  pDesc.textContent='أعد توصيل التغذية الرئيسية. اضبط القواطع على النمط الصحيح.';
-  const target=[1,0,1,1], state=[0,0,0,0];
-  game.innerHTML='<div class="b17-breakers"></div>'; const wrap=game.firstChild;
-  state.forEach((v,i)=>{ const b=document.createElement('button'); b.className='b17-breaker'; b.innerHTML=`<span>${i+1}</span><b>OFF</b>`; b.onclick=()=>{state[i]^=1;b.classList.toggle('on',!!state[i]);b.querySelector('b').textContent=state[i]?'ON':'OFF'; if(state.every((x,j)=>x===target[j])){status.textContent='POWER BUS ONLINE'; solve(0);}};wrap.appendChild(b);});
+  pDesc.textContent='أعد الطاقة عبر شبكة التوزيع. كل زر يدير قطعة سلك 90°. يجب إنشاء مسار متصل من المولد إلى وحدة التحكم.';
+  const target=[1,2,0,3,1,0,2,1,3], rot=[0,0,0,0,0,0,0,0,0];
+  game.innerHTML='<div class="b17-grid power-grid"></div><div class="b17-meter">GENERATOR ▸ ▢ ▢ ▢ ▸ CONTROL</div>';
+  const wrap=game.firstChild;
+  rot.forEach((_,i)=>{const b=document.createElement('button');b.className='b17-tile';b.innerHTML='<span>└</span>';b.onclick=()=>{rot[i]=(rot[i]+1)%4;b.querySelector('span').style.transform=`rotate(${rot[i]*90}deg)`;const ok=rot.every((v,j)=>v===target[j]);status.textContent=`استقرار الشبكة ${rot.filter((v,j)=>v===target[j]).length}/9`;if(ok){wrap.classList.add('powered');finishPuzzle(0,'POWER BUS ONLINE — عادت الإضاءة الرئيسية');}};wrap.appendChild(b);});
 }
 
 function pressurePuzzle(){
-  pDesc.textContent='اضبط ثلاثة صمامات حتى تدخل مؤشرات الضغط إلى المجال الأخضر.';
-  const target=[2,1,3], val=[0,0,0];
-  game.innerHTML='<div class="b17-valves"></div>'; const wrap=game.firstChild;
-  val.forEach((v,i)=>{ const b=document.createElement('button'); b.className='b17-valve'; b.innerHTML=`<span class="wheel">◉</span><b>0/4</b>`; b.onclick=()=>{val[i]=(val[i]+1)%4;b.querySelector('b').textContent=`${val[i]}/4`;b.querySelector('.wheel').style.transform=`rotate(${val[i]*90}deg)`;status.textContent=`الضغط: ${val.reduce((a,x)=>a+x,0)*12} PSI`;if(val.every((x,j)=>x===target[j])){status.textContent='PRESSURE STABLE';solve(1);}};wrap.appendChild(b);});
+  pDesc.textContent='وازن ضغط خطوط التبريد. تدوير أي صمام يؤثر في أكثر من خط؛ اجعل العدادات الثلاثة داخل المجال الأخضر 45–55 PSI.';
+  let v=[0,0,0]; const pressure=()=>[28+v[0]*9+v[2]*4,31+v[1]*8-v[0]*3,26+v[2]*10+v[1]*3];
+  game.innerHTML='<div class="b17-gauges"></div><div class="b17-valves"></div>';const gauges=game.firstChild,wrap=game.lastChild;
+  const render=()=>{const ps=pressure();gauges.innerHTML=ps.map((x,i)=>`<div class="b17-gauge ${x>=45&&x<=55?'ok':''}"><b>${Math.round(x)}</b><small>PSI ${i+1}</small></div>`).join('');status.textContent=`PRESSURE ${ps.map(x=>Math.round(x)).join(' / ')} PSI`;if(ps.every(x=>x>=45&&x<=55))finishPuzzle(1,'PRESSURE STABLE — خطوط التبريد مستقرة');};
+  for(let i=0;i<3;i++){const b=document.createElement('button');b.className='b17-valve';b.innerHTML=`<span class="wheel">✣</span><b>V${i+1}</b>`;b.onclick=()=>{v[i]=(v[i]+1)%4;b.querySelector('.wheel').style.transform=`rotate(${v[i]*90}deg)`;render();};wrap.appendChild(b);}render();
 }
 
 function cluePuzzle(){
-  pDesc.textContent='افحص العناصر الموجودة في الغرفة واجمع الرموز الأربعة.';
-  const clues=[['الكتاب','△'],['الخزانة','○'],['المكتب','III'],['لوحة التحذير','✕']]; let found=new Set();
-  game.innerHTML='<div class="b17-clues"></div>'; const wrap=game.firstChild;
-  clues.forEach(([name,sym])=>{const b=document.createElement('button');b.className='b17-clue';b.textContent=name;b.onclick=()=>{found.add(sym);b.textContent=`${name}  ${sym}`;b.classList.add('found');status.textContent=`الرموز: ${[...found].join('  ')}`;if(found.size===4){status.textContent='تم جمع الأدلة — احفظ الترتيب: △ ○ III ✕';solve(2);}};wrap.appendChild(b);});
+  pDesc.textContent='استخرج الأدلة بالترتيب المنطقي من سجل الملجأ. الرموز وحدها لا تكفي؛ الرقم الموجود مع كل دليل هو ترتيب الإدخال.';
+  const clues=[['كتاب العمليات','△','2'],['خزانة الطوارئ','○','4'],['مذكرة المكتب','III','1'],['لوحة التحذير','✕','3']];let found=new Map();
+  game.innerHTML='<div class="b17-clues"></div><div class="b17-evidence">الأدلة المكتشفة: —</div>';const wrap=game.firstChild,out=game.lastChild;
+  clues.forEach(([name,sym,n])=>{const b=document.createElement('button');b.className='b17-clue';b.textContent=name;b.onclick=()=>{found.set(n,sym);b.classList.add('found');b.textContent=`${name}  [${n}] ${sym}`;out.textContent='الأدلة: '+[...found.entries()].sort().map(([k,x])=>`${k}:${x}`).join('   ');if(found.size===4)finishPuzzle(2,'تم جمع الأدلة — رتّب الرموز حسب الأرقام 1 ← 4');};wrap.appendChild(b);});
 }
 
 function consolePuzzle(){
-  pDesc.textContent='أدخل تسلسل الرموز الذي اكتشفته من الأدلة.';
-  const symbols=['△','○','III','✕']; let entry=[];
-  game.innerHTML='<div class="b17-symbols"></div><div class="b17-entry">— — — —</div>'; const wrap=game.firstChild, out=game.lastChild;
-  symbols.forEach(sym=>{const b=document.createElement('button');b.textContent=sym;b.onclick=()=>{if(entry.length<4)entry.push(sym);out.textContent=entry.join('  ');if(entry.length===4){if(entry.join('|')===symbols.join('|')){status.textContent='SECURITY CORE ACCEPTED — CODE 7314';solve(3);}else{status.textContent='تسلسل خاطئ';entry=[];setTimeout(()=>out.textContent='— — — —',350);}}};wrap.appendChild(b);});
+  pDesc.textContent='أدخل الرموز حسب أرقام الأدلة، وليس حسب مكان العثور عليها.';
+  const answer=['III','△','✕','○'], symbols=['△','○','III','✕'];let entry=[];
+  game.innerHTML='<div class="b17-symbols"></div><div class="b17-entry">— — — —</div>';const wrap=game.firstChild,out=game.lastChild;
+  symbols.forEach(sym=>{const b=document.createElement('button');b.textContent=sym;b.onclick=()=>{if(entry.length<4)entry.push(sym);out.textContent=entry.join('  ');if(entry.length===4){if(entry.every((x,i)=>x===answer[i]))finishPuzzle(3,'SECURITY CORE ACCEPTED — DOOR CODE 7314');else{status.textContent='ACCESS DENIED — أعد قراءة أرقام الأدلة';entry=[];setTimeout(()=>out.textContent='— — — —',450);}}};wrap.appendChild(b);});
 }
 
 function doorPuzzle(){
-  pDesc.textContent='الأنظمة جاهزة. أدخل رمز الإطلاق ثم فعّل آلية الباب.';
-  let code=''; game.innerHTML='<div class="b17-keypad"></div><div class="b17-code">____</div>'; const pad=game.firstChild,out=game.lastChild;
-  [...'1234567890'].forEach(n=>{const b=document.createElement('button');b.textContent=n;b.onclick=()=>{if(code.length<4)code+=n;out.textContent=code.padEnd(4,'_');if(code.length===4){if(code==='7314'){status.textContent='UNLOCKED — اسحب مقبض الباب';const open=document.createElement('button');open.className='b17-open';open.textContent='فتح باب الملجأ';open.onclick=()=>{solve(4);status.textContent='BUNKER 17 OPEN';modal.classList.remove('show');};game.appendChild(open);}else{status.textContent='رمز غير صحيح';code='';setTimeout(()=>out.textContent='____',300);}}};pad.appendChild(b);});
+  pDesc.textContent='أدخل رمز الأمان الذي ظهر على وحدة التحكم، ثم فعّل قفل الباب الميكانيكي.';
+  let code='';game.innerHTML='<div class="b17-keypad"></div><div class="b17-code">____</div>';const pad=game.firstChild,out=game.lastChild;
+  [...'1234567890'].forEach(n=>{const b=document.createElement('button');b.textContent=n;b.onclick=()=>{if(code.length<4)code+=n;out.textContent=code.padEnd(4,'_');if(code.length===4){if(code==='7314'){status.textContent='CODE ACCEPTED — القفل الميكانيكي جاهز';pad.querySelectorAll('button').forEach(x=>x.disabled=true);const open=document.createElement('button');open.className='b17-open';open.textContent='تدوير مقبض الباب';let turns=0;open.onclick=()=>{turns++;open.style.transform=`rotate(${turns*45}deg)`;status.textContent=`تحرير الأقفال ${turns}/4`;if(turns>=4){finishPuzzle(4,'BUNKER 17 OPEN — تم تحرير الباب');modal.classList.remove('show');}};game.appendChild(open);}else{status.textContent='رمز غير صحيح';code='';setTimeout(()=>out.textContent='____',350);}}};pad.appendChild(b);});
 }
 
 useBtn?.addEventListener('click',()=>{ const s=nearestStation(); if(s)openPuzzle(s); else if(hint)hint.textContent='اقترب من إحدى محطات النظام'; });
