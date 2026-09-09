@@ -38,14 +38,26 @@ export class ARManager {
   async requestSession(pendingSession = null) {
     this.resetPlacement();
     const session = pendingSession ? await pendingSession : await navigator.xr.requestSession('immersive-ar', {
+      // Only request features the code actually consumes. plane-detection /
+      // mesh-detection were previously requested but never read anywhere,
+      // which just slows session start for no benefit. 'anchors' is real
+      // now: we use it to keep the placed object locked to the real world.
       requiredFeatures: ['local-floor', 'hit-test'],
-      optionalFeatures: ['dom-overlay', 'plane-detection', 'mesh-detection'],
+      optionalFeatures: ['dom-overlay', 'anchors'],
       domOverlay: { root: document.body }
     });
-    this.renderer.xr.setReferenceSpaceType('local-floor');
+    // renderer.xr.setReferenceSpaceType('local-floor') is already set once
+    // globally at renderer init (needed for VR too) - no need to repeat it
+    // per-session here.
     await this.renderer.xr.setSession(session);
     this.session = session;
     session.addEventListener('end', () => this._onSessionEnd());
+    // WebXR fires 'select' for BOTH a controller trigger AND a phone-screen
+    // tap (transient-pointer input, which has no gamepad object at all).
+    // Driving placement off this event instead of polling gamepad buttons
+    // is what makes tap-to-place work on handheld/phone AR, not just Quest.
+    this._onSelect = () => { if (this.hasHit && !this.placed) this.confirmPlacement(); };
+    session.addEventListener('select', this._onSelect);
     this._savedBackground = this.scene.background;
     this._savedFog = this.scene.fog;
     this.scene.background = null;
@@ -96,9 +108,15 @@ export class ARManager {
   }
 
   update(frame, dt = 1 / 60) {
-    if (!this.session || !frame || this.placed) return;
+    if (!this.session || !frame) return;
     try {
       const refSpace = this.renderer.xr.getReferenceSpace();
+      if (this.placed) {
+        if (this.updateAnchor(frame, refSpace) && this.onAnchorUpdate) {
+          this.onAnchorUpdate(this.getPlacement());
+        }
+        return;
+      }
       this._ensureHitTestSource();
       this._updatePlacement(frame, refSpace, Number.isFinite(dt) ? dt : 1 / 60);
     } catch (e) {
@@ -138,6 +156,7 @@ export class ARManager {
           }
           this.arPosition.set(pose.transform.position.x, pose.transform.position.y, pose.transform.position.z);
           this.hasHit = true;
+          this._lastHitTestResult = results[0];
         }
       }
     }
@@ -183,7 +202,38 @@ export class ARManager {
     if (!this.hasHit || this.placed) return false;
     this.placed = true;
     this.previewGroup.visible = false;
+    this._tryCreateAnchor();
     if (this.onPlaced) this.onPlaced(this.getPlacement());
+    return true;
+  }
+
+  // Anchors let the platform's SLAM/tracking keep the placed object glued
+  // to the real-world spot even as the device re-localizes over a longer
+  // session, instead of trusting a single absolute coordinate forever.
+  async _tryCreateAnchor() {
+    this.anchor = null;
+    if (!this._lastHitTestResult || typeof this._lastHitTestResult.createAnchor !== 'function') return;
+    try {
+      this.anchor = await this._lastHitTestResult.createAnchor();
+    } catch (e) {
+      console.warn('[ARManager] anchor creation not available, using static placement:', e);
+      this.anchor = null;
+    }
+  }
+
+  // Call once per frame after placement; returns true if the anchor moved
+  // the object (caller should re-sync anything mirroring arPosition/arQuaternion).
+  updateAnchor(frame, refSpace) {
+    if (!this.anchor || !frame) return false;
+    const pose = frame.getPose(this.anchor.anchorSpace, refSpace);
+    if (!pose) return false;
+    this.arPosition.set(pose.transform.position.x, pose.transform.position.y, pose.transform.position.z);
+    this.arQuaternion.set(
+      pose.transform.orientation.x,
+      pose.transform.orientation.y,
+      pose.transform.orientation.z,
+      pose.transform.orientation.w
+    );
     return true;
   }
 
@@ -192,6 +242,8 @@ export class ARManager {
     this.placed = false;
     this.hitTestSource = null;
     this.hitTestSourceRequested = false;
+    this._lastHitTestResult = null;
+    this.anchor = null;
     this._prevTrigger.left = false;
     this._prevTrigger.right = false;
     this.previewGroup.visible = false;
@@ -216,9 +268,14 @@ export class ARManager {
   }
 
   _onSessionEnd() {
+    if (this.session && this._onSelect) {
+      try { this.session.removeEventListener('select', this._onSelect); } catch (_) {}
+    }
     this.session = null;
     this.hitTestSource = null;
     this.hitTestSourceRequested = false;
+    this._lastHitTestResult = null;
+    this.anchor = null;
     this.hasHit = false;
     this.placed = false;
     if (this._savedBackground !== null) this.scene.background = this._savedBackground;
