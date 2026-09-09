@@ -3,86 +3,20 @@ from pathlib import Path
 path = Path('src/bunker17.js')
 s = path.read_text(encoding='utf-8')
 
-# Import the FBX loader used by the original Shelter character.
-s = s.replace(
-    "import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';\n",
-    "import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';\nimport { FBXLoader } from 'three/addons/loaders/FBXLoader.js';\n",
-    1,
+def rep(old, new, label):
+    global s
+    if old not in s:
+        raise SystemExit(f'Expected block not found: {label}')
+    s = s.replace(old, new, 1)
+
+rep(
+    "camera.position.set(0, .28, 3.15);",
+    "camera.position.set(0, .48, 2.2);",
+    "third-person camera",
 )
 
-# Move the flat-screen camera behind the avatar so the player character is visible.
-s = s.replace(
-    "player.add(camera);\nscene.add(player);",
-    "camera.position.set(0, .28, 3.15);\nplayer.add(camera);\nscene.add(player);",
-    1,
-)
-
-# Restore the original Shelter background music with browser-safe user-gesture start and mute control.
-music = r'''
-
-// BUNKER 17 ambience/music. Browsers require the first play call to follow a user gesture.
-const bgm = new Audio('https://opengameart.org/sites/default/files/sector_0.mp3');
-bgm.loop = true;
-bgm.volume = .20;
-bgm.preload = 'auto';
-let bgmStarted = false;
-function startBgm(){
-  if (bgmStarted) return;
-  bgm.play().then(()=>{ bgmStarted = true; }).catch(()=>{});
-}
-['pointerdown','keydown','touchstart'].forEach(type=>addEventListener(type,startBgm,{once:true,passive:true}));
-const musicBtn=document.createElement('button');
-musicBtn.id='musicBtn';
-musicBtn.textContent='🔊';
-musicBtn.title='تشغيل/كتم الموسيقى';
-Object.assign(musicBtn.style,{position:'fixed',left:'12px',top:'12px',zIndex:'55',width:'42px',height:'42px',borderRadius:'50%',border:'1px solid #ffffff44',background:'#0a0d10dd',color:'#fff',fontSize:'18px',cursor:'pointer'});
-musicBtn.addEventListener('click',e=>{e.stopPropagation();startBgm();bgm.muted=!bgm.muted;musicBtn.textContent=bgm.muted?'🔇':'🔊';});
-document.body.appendChild(musicBtn);
-'''
-s = s.replace("const room = new THREE.Group();\nscene.add(room);", "const room = new THREE.Group();\nscene.add(room);" + music, 1)
-
-# Restore the repository's existing Kenney character and idle/run animation.
-avatar = r'''
-const fbxLoader = new FBXLoader(assetManager);
-const textureLoader = new THREE.TextureLoader(assetManager);
-const avatar = new THREE.Group();
-room.add(avatar);
-let avatarModel=null, avatarMixer=null, avatarIdle=null, avatarRun=null, avatarMoving=false;
-
-Promise.all([
-  fbxLoader.loadAsync('./assets/kenney/characterMedium.fbx'),
-  fbxLoader.loadAsync('./assets/kenney/idle.fbx'),
-  fbxLoader.loadAsync('./assets/kenney/run.fbx'),
-  textureLoader.loadAsync('./assets/kenney/humanMaleA.png')
-]).then(([model,idle,run,texture])=>{
-  texture.colorSpace=THREE.SRGBColorSpace;
-  texture.flipY=true;
-  model.updateMatrixWorld(true);
-  let box=new THREE.Box3().setFromObject(model);
-  const size=box.getSize(new THREE.Vector3());
-  model.scale.setScalar(1.72/Math.max(size.y,.001));
-  model.updateMatrixWorld(true);
-  box=new THREE.Box3().setFromObject(model);
-  const center=box.getCenter(new THREE.Vector3());
-  model.position.x-=center.x;
-  model.position.y-=box.min.y;
-  model.position.z-=center.z;
-  model.traverse(n=>{
-    if(!n.isMesh)return;
-    n.castShadow=true;
-    n.receiveShadow=true;
-    n.material=new THREE.MeshStandardMaterial({map:texture,roughness:.82,metalness:0});
-  });
-  avatarModel=model;
-  avatar.add(model);
-  avatarMixer=new THREE.AnimationMixer(model);
-  if(idle.animations[0]){avatarIdle=avatarMixer.clipAction(idle.animations[0],model);avatarIdle.play();}
-  if(run.animations[0]){avatarRun=avatarMixer.clipAction(run.animations[0],model);}
-  avatar.position.set(player.position.x,0,player.position.z);
-  avatar.rotation.y=Math.PI;
-}).catch(e=>console.warn('BUNKER 17 character failed to load',e));
-
-function syncAvatar(moving,dt){
+rep(
+'''function syncAvatar(moving,dt){
   if(!avatarModel)return;
   avatar.position.set(player.position.x,0,player.position.z);
   avatar.rotation.y=yaw+Math.PI;
@@ -91,36 +25,64 @@ function syncAvatar(moving,dt){
   avatarMoving=moving;
   if(moving&&avatarRun){avatarIdle?.fadeOut(.18);avatarRun.reset().fadeIn(.18).play();}
   else if(avatarIdle){avatarRun?.fadeOut(.18);avatarIdle.reset().fadeIn(.18).play();}
+}''',
+'''function setAvatarMotion(moving){
+  if(!avatarModel||moving===avatarMoving)return;
+  avatarMoving=moving;
+  if(moving&&avatarRun){avatarIdle?.fadeOut(.18);avatarRun.reset().fadeIn(.18).play();}
+  else if(avatarIdle){avatarRun?.fadeOut(.18);avatarIdle.reset().fadeIn(.18).play();}
 }
-'''
-s = s.replace("const loader = new GLTFLoader(assetManager);\n", "const loader = new GLTFLoader(assetManager);\n" + avatar, 1)
-
-# Keep the avatar in sync with flat-screen movement.
-s = s.replace(
-    "player.position.z=THREE.MathUtils.clamp(player.position.z,-4.35,4.35);const s=nearestStation();",
-    "player.position.z=THREE.MathUtils.clamp(player.position.z,-4.35,4.35);syncAvatar(v.lengthSq()>.00001,dt);const s=nearestStation();",
-    1,
+function syncFlatAvatar(moving,dt){
+  if(!avatarModel)return;
+  avatar.position.set(player.position.x,0,player.position.z);
+  avatar.rotation.y=yaw+Math.PI;
+  avatarMixer?.update(dt);
+  setAvatarMotion(moving);
+}''',
+    "avatar motion helpers",
 )
 
-# Start music in XR, hide the full avatar in first-person VR, and retain it in miniature AR.
-s = s.replace(
-    "renderer.xr.addEventListener('sessionstart',()=>{const s=renderer.xr.getSession();xrMode=s?.environmentBlendMode==='opaque'?'vr':'ar';",
-    "renderer.xr.addEventListener('sessionstart',()=>{startBgm();const s=renderer.xr.getSession();xrMode=s?.environmentBlendMode==='opaque'?'vr':'ar';avatar.visible=xrMode!=='vr';",
-    1,
-)
-s = s.replace(
-    "renderer.xr.addEventListener('sessionend',()=>{xrMode='flat';",
-    "renderer.xr.addEventListener('sessionend',()=>{xrMode='flat';avatar.visible=true;",
-    1,
-)
-s = s.replace(
-    "arBtn.onclick=async()=>{try{await arManager.requestSession();}",
-    "arBtn.onclick=async()=>{try{startBgm();await arManager.requestSession();}",
-    1,
+rep(
+'''arManager.onPlaced=({position,quaternion})=>{room.position.copy(position);room.quaternion.copy(quaternion);room.scale.setScalar(.22);room.visible=true;};''',
+'''const arAvatarPos=new THREE.Vector3(0,0,3.0),arRoomQuat=new THREE.Quaternion(),arInvRoomQuat=new THREE.Quaternion(),arLocalMove=new THREE.Vector3();
+function resetArAvatar(){arAvatarPos.set(0,0,3.0);avatar.position.copy(arAvatarPos);avatar.rotation.y=Math.PI;setAvatarMotion(false);}
+arManager.onPlaced=({position,quaternion})=>{room.position.copy(position);room.quaternion.copy(quaternion);room.scale.setScalar(.22);room.visible=true;resetArAvatar();avatar.visible=true;};''',
+    "AR placement/avatar",
 )
 
-# Ensure the initial avatar transform is correct before the first movement frame.
-s = s.replace("setStage(0);buildRoom();", "setStage(0);buildRoom();", 1)
+rep(
+'''renderer.xr.addEventListener('sessionstart',()=>{startBgm();const s=renderer.xr.getSession();xrMode=s?.environmentBlendMode==='opaque'?'vr':'ar';avatar.visible=xrMode!=='vr';if(xrMode==='ar'){scene.background=null;scene.fog=null;room.visible=false;}else{room.visible=true;room.position.set(0,0,0);room.quaternion.identity();room.scale.setScalar(1);player.position.set(0,1.66,3.9);}});''',
+'''renderer.xr.addEventListener('sessionstart',()=>{startBgm();const s=renderer.xr.getSession();xrMode=s?.environmentBlendMode==='opaque'?'vr':'ar';if(xrMode==='ar'){avatar.visible=false;scene.background=null;scene.fog=null;room.visible=false;}else{avatar.visible=false;room.visible=true;room.position.set(0,0,0);room.quaternion.identity();room.scale.setScalar(1);player.position.set(0,1.66,3.9);}});''',
+    "XR session start",
+)
 
-path.write_text(s,encoding='utf-8')
-print('Patched BUNKER 17 character, third-person camera and music.')
+rep(
+'''function adjustAR(dt){
+  if(!arManager.isPlaced())return;
+  const {x,z}=arManager.getMoveInput();const rot=arManager.getRotateInput();
+  const xrCam=renderer.xr.getCamera(camera);xrCam.getWorldDirection(xrForward);xrForward.y=0;if(xrForward.lengthSq()>.001)xrForward.normalize();else xrForward.set(0,0,-1);
+  xrRight.crossVectors(xrForward,xrUp).normalize();
+  room.position.addScaledVector(xrRight,x*.55*dt).addScaledVector(xrForward,-z*.55*dt);
+  if(rot!==0)room.rotateY(-rot*1.25*dt);
+}''',
+'''function adjustAR(dt){
+  if(!arManager.isPlaced())return;
+  const {x,z}=arManager.getMoveInput();const rot=arManager.getRotateInput();
+  const xrCam=renderer.xr.getCamera(camera);xrCam.getWorldDirection(xrForward);xrForward.y=0;if(xrForward.lengthSq()<.001)xrForward.set(0,0,-1);else xrForward.normalize();
+  room.getWorldQuaternion(arRoomQuat);arInvRoomQuat.copy(arRoomQuat).invert();xrForward.applyQuaternion(arInvRoomQuat);xrForward.y=0;if(xrForward.lengthSq()<.001)xrForward.set(0,0,-1);else xrForward.normalize();
+  xrRight.set(xrForward.z,0,-xrForward.x);arLocalMove.set(0,0,0).addScaledVector(xrRight,x).addScaledVector(xrForward,-z);if(arLocalMove.lengthSq()>1)arLocalMove.normalize();
+  const moving=arLocalMove.lengthSq()>.0001;
+  if(moving){arAvatarPos.addScaledVector(arLocalMove,2.2*dt);arAvatarPos.x=THREE.MathUtils.clamp(arAvatarPos.x,-4.65,4.65);arAvatarPos.z=THREE.MathUtils.clamp(arAvatarPos.z,-4.35,4.35);avatar.position.copy(arAvatarPos);avatar.rotation.y=Math.atan2(arLocalMove.x,arLocalMove.z);}else if(Math.abs(rot)>.15){avatar.rotation.y-=rot*1.7*dt;}
+  avatarMixer?.update(dt);setAvatarMotion(moving);
+}''',
+    "AR character movement",
+)
+
+rep(
+    "syncAvatar(v.lengthSq()>.00001,dt);",
+    "syncFlatAvatar(v.lengthSq()>.00001,dt);",
+    "flat avatar sync",
+)
+
+path.write_text(s, encoding='utf-8')
+print('Fixed BUNKER 17 third-person camera and AR character movement.')
