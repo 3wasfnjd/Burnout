@@ -5,7 +5,7 @@ import { ARManager } from './ARManager.js';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x080a0b);
-scene.fog = new THREE.FogExp2(0x08090a, 0.035);
+scene.fog = new THREE.FogExp2(0x101214, 0.012);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
@@ -14,7 +14,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.42;
+renderer.toneMappingExposure = 1.95;
 renderer.xr.enabled = true;
 renderer.xr.setReferenceSpaceType('local-floor');
 document.body.prepend(renderer.domElement);
@@ -121,14 +121,20 @@ const paths = {
   books: PH + 'book_encyclopedia_set_01/model.gltf'
 };
 
-const emergency = new THREE.PointLight(0xff2b20, 3.5, 11, 2);
+const emergency = new THREE.PointLight(0xff3a2e, 1.4, 10, 2);
 emergency.position.set(0, 3.55, 0.5);
 room.add(emergency);
-const ambient = new THREE.HemisphereLight(0x9aabb2, 0x17130f, 0.72);
+const ambient = new THREE.HemisphereLight(0xd7e4ea, 0x2a2119, 1.35);
 scene.add(ambient);
+const fillLight = new THREE.DirectionalLight(0xcfe7f2, 1.5);
+fillLight.position.set(2.5, 5.5, 4.5);
+scene.add(fillLight);
+const warmFill = new THREE.DirectionalLight(0xffc58c, 0.95);
+warmFill.position.set(-4.5, 3.5, -1.5);
+scene.add(warmFill);
 const mainLights = [];
 for (const p of [[-3.8,3.25,0],[0,3.25,0],[3.8,3.25,0]]) {
-  const l = new THREE.PointLight(0xffd6a3, 1.15, 10, 1.7);
+  const l = new THREE.PointLight(0xffd8ad, 3.2, 13, 1.55);
   l.position.set(...p); l.castShadow = true; l.shadow.mapSize.set(512,512); room.add(l); mainLights.push(l);
 }
 const consoleGlow = new THREE.PointLight(0x54d7bf, 0.25, 4, 2);
@@ -272,7 +278,7 @@ const arManager=new ARManager({renderer,scene,controllers}); let xrMode='flat';
 arManager.onPlaced=({position,quaternion})=>{room.position.copy(position);room.quaternion.copy(quaternion);room.scale.setScalar(.22);room.visible=true;};
 arBtn.onclick=async()=>{try{await arManager.requestSession();}catch(e){console.error(e)}};
 renderer.xr.addEventListener('sessionstart',()=>{const s=renderer.xr.getSession();xrMode=s?.environmentBlendMode==='opaque'?'vr':'ar';if(xrMode==='ar'){scene.background=null;scene.fog=null;room.visible=false;}else{room.visible=true;room.position.set(0,0,0);room.quaternion.identity();room.scale.setScalar(1);player.position.set(0,1.66,3.9);}});
-renderer.xr.addEventListener('sessionend',()=>{xrMode='flat';scene.background=new THREE.Color(0x080a0b);scene.fog=new THREE.FogExp2(0x08090a,.035);room.visible=true;room.position.set(0,0,0);room.quaternion.identity();room.scale.setScalar(1);});
+renderer.xr.addEventListener('sessionend',()=>{xrMode='flat';scene.background=new THREE.Color(0x080a0b);scene.fog=new THREE.FogExp2(0x101214,.012);room.visible=true;room.position.set(0,0,0);room.quaternion.identity();room.scale.setScalar(1);});
 
 controllers.forEach(c=>c.addEventListener('selectstart',()=>{if(xrMode==='vr'){const p=new THREE.Vector3();c.getWorldPosition(p);let best=null,d=999;for(const s of stations){const dd=p.distanceTo(s.pos);if(dd<d){d=dd;best=s;}}if(best&&d<3.0)openPuzzle(best);}}));
 
