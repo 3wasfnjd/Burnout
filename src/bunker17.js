@@ -142,6 +142,22 @@ consoleGlow.position.set(0, 1.5, -4.3); room.add(consoleGlow);
 const doorLight = new THREE.PointLight(0xff281f, 2.2, 3.6, 2);
 doorLight.position.set(0,2.6,-5.1); room.add(doorLight);
 
+// Wall wash lighting keeps the wall materials readable without flattening the bunker mood.
+// The visible fixtures are imported GLTF sconces; these PointLights are illumination only.
+const wallWashLights = [];
+for (const [x,y,z,color,intensity,distance] of [
+  [-4.55,2.15,-2.5,0xffd1a3,1.7,5.2], [-4.55,2.15,2.25,0xffd1a3,1.55,5.2],
+  [ 4.55,2.15,-2.5,0xffd1a3,1.7,5.2], [ 4.55,2.15,2.25,0xffd1a3,1.55,5.2],
+  [-3.0,2.2,-4.45,0xd7ecff,1.45,5.5], [0,2.2,-4.45,0xd7ecff,1.55,5.5], [3.0,2.2,-4.45,0xd7ecff,1.45,5.5],
+  [-3.0,2.15,4.45,0xffd9b8,1.2,4.8], [3.0,2.15,4.45,0xffd9b8,1.2,4.8]
+]) {
+  const light = new THREE.PointLight(color, intensity, distance, 1.85);
+  light.position.set(x,y,z);
+  light.castShadow = false;
+  room.add(light);
+  wallWashLights.push(light);
+}
+
 async function buildRoom() {
   // Imported architectural meshes only; no visible Three.js primitive shell.
   for (let x=-4.5; x<=4.5; x+=1.8) for (let z=-4.2; z<=4.2; z+=1.8) await fit(paths.floor,[x,0,z],[1.72,.12,1.72]);
@@ -157,6 +173,10 @@ async function buildRoom() {
   for (let x=-3.6;x<=3.6;x+=3.6) await fit(paths.hanging,[x,3.15,0],[1.1,.7,1.1]);
   await fit(paths.sconce,[-4.92,2.0,-2.4],[.65,.85,.55],Math.PI/2);
   await fit(paths.sconce,[4.92,2.0,-2.4],[.65,.85,.55],-Math.PI/2);
+  await fit(paths.sconce,[-4.92,2.0,2.15],[.65,.85,.55],Math.PI/2);
+  await fit(paths.sconce,[4.92,2.0,2.15],[.65,.85,.55],-Math.PI/2);
+  await fit(paths.sconce,[-3.0,2.05,-4.78],[.62,.82,.52],0);
+  await fit(paths.sconce,[3.0,2.05,-4.78],[.62,.82,.52],0);
   await fit(paths.pipes,[-4.55,.25,-.5],[1.15,3.1,3.5],Math.PI/2);
   await fit(paths.desk,[-1.1,.05,1.25],[2.5,1.3,1.5],Math.PI);
   await fit(paths.shelves,[4.15,.05,1.55],[1.7,3.1,1.05],-Math.PI/2);
@@ -193,7 +213,7 @@ const status = document.getElementById('status');
 document.getElementById('close')?.addEventListener('click',()=>modal?.classList.remove('show'));
 
 function setStage(n){ stage=n; if(hint) hint.textContent=`النظام ${n+1}/5 — ${stageNames[n]}`; }
-function solve(n){ completed[n]=true; if(n===0){ emergency.intensity=.45; ambient.intensity=1.05; mainLights.forEach(l=>l.intensity=5.2); }
+function solve(n){ completed[n]=true; if(n===0){ emergency.intensity=.45; ambient.intensity=1.05; mainLights.forEach(l=>l.intensity=5.2); wallWashLights.forEach(l=>l.intensity*=1.35); }
   if(n===1){ consoleGlow.intensity=.8; }
   if(n===3){ doorLight.color.set(0xffb12f); doorLight.intensity=3; }
   if(n===4){ doorLight.color.set(0x55ff9a); doorLight.intensity=4.5; }
