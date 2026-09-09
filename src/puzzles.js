@@ -25,7 +25,7 @@ export function bindPuzzles({getRoom,onSolved,canOpen}){
   const titlePlate=new THREE.Mesh(new THREE.BoxGeometry(2.7,.42,.12),brass);titlePlate.position.set(1.45,2.65,-.12);s.add(titlePlate);
   a.forEach((v,i)=>{const x=(i%3-1)*1.85,y=(1-Math.floor(i/3))*1.72;const g=new THREE.Group();g.position.set(x,y,0);g.userData.idx=i;
    const socket=new THREE.Mesh(new THREE.CylinderGeometry(.72,.72,.28,8),steel);socket.rotation.x=Math.PI/2;socket.userData.idx=i;g.add(socket);
-   const token=new THREE.Mesh(new THREE.CylinderGeometry(.58,.58,.34,10),numMat(v,i===sel));token.rotation.x=Math.PI/2;token.position.z=.18;token.userData.idx=i;g.add(token);
+   const token=new THREE.Mesh(new THREE.CylinderGeometry(.58,.58,.34,10),new THREE.MeshStandardMaterial({color:i===sel?0x8a5a22:0x343a40,metalness:.45,roughness:.35}));token.rotation.x=Math.PI/2;token.position.z=.18;token.userData.idx=i;g.add(token);const face=new THREE.Mesh(new THREE.CircleGeometry(.49,32),numMat(v,i===sel));face.position.z=.37;face.userData.idx=i;g.add(face);
    const ring=new THREE.Mesh(new THREE.TorusGeometry(.66,.055,10,28),i===sel?new THREE.MeshStandardMaterial({color:0xffc45a,emissive:0xff8a22,emissiveIntensity:4}):brass);ring.position.z=.38;ring.userData.idx=i;g.add(ring);
    if(i===sel){const glow=new THREE.PointLight(0xffa33b,2.4,2.1,2);glow.position.z=.8;g.add(glow)}
    s.add(g);g.traverse(o=>{if(o.isMesh)h.push(o)})
