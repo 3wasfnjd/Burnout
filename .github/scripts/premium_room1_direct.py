@@ -1,0 +1,150 @@
+import json
+import pathlib
+import urllib.request
+import urllib.parse
+
+ASSETS = [
+    'modular_industrial_pipes_01',
+    'industrial_caged_sconce',
+    'hanging_industrial_lamp',
+    'metal_office_desk',
+    'steel_frame_shelves_02',
+    'book_encyclopedia_set_01',
+    'drawer_cabinet',
+]
+BASE = pathlib.Path('assets/vendor/polyhaven')
+BASE.mkdir(parents=True, exist_ok=True)
+
+
+def walk(obj, trail=()):
+    if isinstance(obj, dict):
+        if isinstance(obj.get('url'), str):
+            yield trail, obj
+        for k, v in obj.items():
+            yield from walk(v, trail + (str(k),))
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            yield from walk(v, trail + (str(i),))
+
+
+def download_asset(asset):
+    print('asset', asset)
+    out = BASE / asset
+    out.mkdir(parents=True, exist_ok=True)
+    with urllib.request.urlopen(f'https://api.polyhaven.com/files/{asset}', timeout=90) as response:
+        data = json.load(response)
+    items = list(walk(data))
+    chosen = []
+    for res in ('2k', '4k', '1k'):
+        selected = [(trail, node) for trail, node in items if 'gltf' in '/'.join(trail).lower() and res in '/'.join(trail).lower()]
+        if any(urllib.parse.urlparse(node['url']).path.lower().endswith('.gltf') for _, node in selected):
+            chosen = selected
+            break
+    if not chosen:
+        raise RuntimeError(f'No glTF files found for {asset}')
+
+    roots = []
+    downloaded = set()
+    for _, node in chosen:
+        url = node['url']
+        path = urllib.parse.urlparse(url).path
+        ext = pathlib.Path(path).suffix.lower()
+        if ext not in {'.gltf', '.bin', '.png', '.jpg', '.jpeg', '.webp', '.ktx2'}:
+            continue
+        name = pathlib.Path(path).name
+        if name in downloaded:
+            continue
+        downloaded.add(name)
+        dest = out / name
+        print('  download', name)
+        urllib.request.urlretrieve(url, dest)
+        if ext == '.gltf':
+            roots.append(dest)
+    if not roots:
+        raise RuntimeError(f'No root glTF downloaded for {asset}')
+
+    root_file = sorted(roots, key=lambda p: (asset.lower() not in p.name.lower(), len(p.name)))[0]
+    gltf = json.loads(root_file.read_text())
+    for buf in gltf.get('buffers', []):
+        if isinstance(buf.get('uri'), str):
+            buf['uri'] = pathlib.Path(urllib.parse.urlparse(buf['uri']).path).name
+    for img in gltf.get('images', []):
+        if isinstance(img.get('uri'), str):
+            img['uri'] = pathlib.Path(urllib.parse.urlparse(img['uri']).path).name
+    (out / 'model.gltf').write_text(json.dumps(gltf, separators=(',', ':')))
+
+
+for asset_name in ASSETS:
+    download_asset(asset_name)
+
+main = pathlib.Path('src/main.js')
+s = main.read_text()
+marker = '\nfunction shell(i)'
+pos = s.find(marker)
+if pos < 0:
+    raise RuntimeError('shell marker missing')
+
+helper = '''
+const PH='./assets/vendor/polyhaven/';
+async function phfit(asset,x,y,z,w,h,d,ry=0,sld=false){
+ try{
+  const a=await gltf.loadAsync(PH+asset+'/model.gltf'),o=a.scene;
+  o.rotation.y=ry;o.updateMatrixWorld(true);
+  let b=new THREE.Box3().setFromObject(o),sz=b.getSize(new THREE.Vector3());
+  o.scale.set(w/Math.max(sz.x,.001),h/Math.max(sz.y,.001),d/Math.max(sz.z,.001));
+  o.updateMatrixWorld(true);b=new THREE.Box3().setFromObject(o);const c=b.getCenter(new THREE.Vector3());
+  o.position.set(x-c.x,y-b.min.y,z-c.z);
+  o.traverse(n=>{if(n.isMesh){n.castShadow=true;n.receiveShadow=true}});
+  add(o);if(sld)solid(x,z,w,d);return o
+ }catch(e){console.warn('Poly Haven asset failed',asset,e)}
+}
+function phLight(asset,x,y,z,w,h,d,ry=0,color=0xffc27a,power=5,distance=5){
+ phfit(asset,x,y,z,w,h,d,ry,false);
+ const l=new THREE.PointLight(color,power,distance,1.7);l.position.set(x,y,z+.14);l.castShadow=true;l.shadow.mapSize.set(512,512);add(l);return l
+}
+'''
+if "const PH='./assets/vendor/polyhaven/'" not in s:
+    s = s[:pos] + helper + s[pos:]
+
+shell = s.index('function shell(i)')
+st = s.index('if(i===0){', shell)
+en = s.index('return}', st) + len('return}')
+shell_new = '''if(i===0){
+ // Room 1 visible shell uses imported meshes only. Colliders remain invisible data.
+ for(let x=-6.45;x<=6.45;x+=2.15)for(let z=-2.55;z<=2.55;z+=1.70)qfit('Platforms/Platform_DarkPlates.gltf',x,.02,z,2.08,.16,1.62,0,false);
+ for(let x=-6.35;x<=3.05;x+=2.20){qfit('Walls/WallAstra_Straight.gltf',x,.08,-3.48,2.16,4.48,.40);qfit('Walls/BottomMetal_Straight.gltf',x,.08,-3.20,2.16,.42,.30)}
+ for(let z=-2.42;z<=2.42;z+=1.62){qfit('Walls/WallAstra_Straight.gltf',-7.58,.08,z,1.58,4.48,.40,Math.PI/2);qfit('Walls/BottomMetal_Straight.gltf',-7.30,.08,z,1.58,.42,.30,Math.PI/2)}
+ for(let x=-6.45;x<=5.25;x+=2.15)for(let z=-2.45;z<=1.05;z+=1.75)qfit('Platforms/Platform_Metal2.gltf',x,4.28,z,2.08,.12,1.65,0,false);
+ qfit('Walls/TopCables_Straight_Hanging.gltf',-4.3,3.95,-3.10,2.15,.66,.52);qfit('Walls/TopCables_Straight_Hanging.gltf',-2.0,3.95,-3.10,2.15,.66,.52);qfit('Walls/TopCables_Straight_Hanging.gltf',.3,3.95,-3.10,2.15,.66,.52);
+ solid(-7.72,0,.18,8.1);solid(0,-3.72,15.2,.18);
+ phLight('industrial_caged_sconce',-5.15,3.02,-3.01,.78,1.10,.52,0,0xffb86e,5.6,5.4);
+ phLight('industrial_caged_sconce',1.32,3.02,-3.01,.78,1.10,.52,0,0xffb86e,5.2,5.2);
+ phLight('hanging_industrial_lamp',-1.15,3.02,.42,.95,1.34,.95,0,0xffd29a,6.0,5.8);
+ return}'''
+s = s[:st] + shell_new + s[en:]
+
+dress = s.index('function dress(i)')
+st = s.index('if(i===0){', dress)
+en = s.index('}else if(i===1)', st) + 1
+dress_new = '''if(i===0){
+ qfit('Platforms/Door_Frame_SquareTall.gltf',5.55,.08,-3.18,3.55,4.35,.88,0,true);
+ qfit('Platforms/Door_Metal.gltf',5.55,.22,-2.86,2.62,3.48,.38,0,true);
+ qfit('Props/Prop_AccessPoint.gltf',3.92,.72,-2.73,.82,1.18,.34,0,false);
+ phLight('industrial_caged_sconce',5.55,3.68,-2.62,.72,1.02,.50,0,0xffa55d,6.4,5.0);
+ phfit('metal_office_desk',-4.55,.08,-1.72,2.55,1.08,1.25,0,true);
+ phfit('steel_frame_shelves_02',-6.32,.08,-2.45,2.15,3.02,.72,0,true);
+ phfit('drawer_cabinet',2.58,.08,-2.34,1.55,2.22,.74,0,true);
+ phfit('book_encyclopedia_set_01',-6.24,1.18,-2.02,1.42,.58,.44,0,false);
+ phfit('book_encyclopedia_set_01',-6.27,2.03,-2.02,1.26,.52,.43,0,false);
+ phfit('modular_industrial_pipes_01',-.20,.08,-2.78,4.72,3.18,.88,0,false);
+ qfit('Props/Prop_Chest.gltf',-5.74,.08,2.18,1.72,.94,.92,0,true);
+ qfit('Props/Prop_Crate4.gltf',-3.70,.08,2.40,.94,.80,.94,.12,true);
+ qfit('Props/Prop_Barrel_Large.gltf',2.86,.08,2.25,.80,1.32,.80,0,true);
+ phLight('hanging_industrial_lamp',-4.05,3.02,.62,.92,1.30,.92,0,0xffcf8c,5.1,4.9);
+ phLight('hanging_industrial_lamp',1.92,3.04,.62,.92,1.30,.92,0,0xffcf8c,5.1,4.9);
+ }'''
+s = s[:st] + dress_new + s[en:]
+main.write_text(s)
+
+(BASE / 'README.md').write_text('''# Poly Haven assets\nCC0 assets used in room 1:\n- modular_industrial_pipes_01\n- industrial_caged_sconce\n- hanging_industrial_lamp\n- metal_office_desk\n- steel_frame_shelves_02\n- book_encyclopedia_set_01\n- drawer_cabinet\nSource: https://polyhaven.com/\nLicense: https://polyhaven.com/license\n''')
+print('Premium room 1 patch complete')
