@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: '20'
       - name: Download assets and patch room 1
-        run: python3 .github/scripts/premium_room1_direct.py
+        run: python3 .github/scripts/run_premium_room1.py
       - name: Verify JavaScript
         run: node --check src/main.js
       - name: Commit room 1 conversion
