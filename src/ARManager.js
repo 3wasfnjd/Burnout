@@ -1,9 +1,6 @@
 import * as THREE from 'three';
 
-// Adapted from the proven ARManager used by the Drifting project.
-// Shelter-specific physics/vehicle code is deliberately omitted: this class
-// owns AR session setup, hit-test placement, preview, controller state and
-// post-placement movement input only.
+// AR placement + controller input for BUNKER 17.
 const DEADZONE = 0.15;
 const MOVE_SPEED = 1.5;
 const ROTATE_SPEED = 1.2;
@@ -98,12 +95,12 @@ export class ARManager {
     return group;
   }
 
-  update(frame, dt) {
+  update(frame, dt = 1 / 60) {
     if (!this.session || !frame || this.placed) return;
     try {
       const refSpace = this.renderer.xr.getReferenceSpace();
       this._ensureHitTestSource();
-      this._updatePlacement(frame, refSpace, dt);
+      this._updatePlacement(frame, refSpace, Number.isFinite(dt) ? dt : 1 / 60);
     } catch (e) {
       console.error('[ARManager] update() error:', e);
     }
@@ -158,7 +155,7 @@ export class ARManager {
       const forward = this._camForward.set(0, 0, -1).transformDirection(xrCam.matrixWorld);
       forward.y = 0;
       forward.normalize();
-      const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).negate();
+      const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0));
       this.arPosition.addScaledVector(right, moveX * MOVE_SPEED * dt).addScaledVector(forward, -moveY * MOVE_SPEED * dt);
     }
     if (rotX !== 0) {
@@ -207,14 +204,15 @@ export class ARManager {
     return { position: this.arPosition.clone(), quaternion: this.arQuaternion.clone(), angle: yaw };
   }
 
-  // After placement, use the left stick for the character. This mirrors the
-  // source manager's separation between placement controls and gameplay input.
+  // Left stick moves the placed miniature; right stick rotates it.
   getMoveInput() {
     const axesL = this.gamepads.left ? this.gamepads.left.axes : [];
+    return { x: this._axis(axesL, 2), z: this._axis(axesL, 3) };
+  }
+
+  getRotateInput() {
     const axesR = this.gamepads.right ? this.gamepads.right.axes : [];
-    let x = this._axis(axesL, 2), z = this._axis(axesL, 3);
-    if (x === 0 && z === 0) { x = this._axis(axesR, 2); z = this._axis(axesR, 3); }
-    return { x, z };
+    return this._axis(axesR, 2);
   }
 
   _onSessionEnd() {
