@@ -8,19 +8,36 @@ let arScale=.32,arPlaced=false,arYaw=0;const arManager=new ARManager({renderer,s
 renderer.xr.addEventListener('sessionstart',()=>{startBgm();const ses=renderer.xr.getSession();xrKind=ses&&ses.environmentBlendMode==='opaque'?'vr':'ar';document.body.classList.add('xr-active');try{puzzles.close?.()}catch(e){};const ub=document.getElementById('use');if(ub)ub.style.display=xrKind==='ar'?'':'none';if(xrKind==='ar'){scene.background=null;scene.fog=null;arPlaced=false;player.visible=false;if(root){root.visible=false;root.scale.setScalar(arScale)}}else{player.visible=false;if(root){root.visible=true;root.scale.setScalar(1);root.position.set(0,0,0);root.quaternion.identity()}xrRig.position.set(0,0,2.35);xrRig.rotation.set(0,0,0)}});renderer.xr.addEventListener('sessionend',()=>{xrKind='flat';arPlaced=false;document.body.classList.remove('xr-active');const ub=document.getElementById('use');if(ub)ub.style.display='';scene.background=desktopBg;scene.fog=desktopFog;player.visible=true;player.scale.setScalar(1);player.rotation.y=0;closeVrPuzzle();arBtn.disabled=false;if(root){root.visible=true;root.scale.setScalar(1);root.position.set(0,0,0);root.quaternion.identity()}});scene.add(new THREE.HemisphereLight(0xddeeff,0x403a34,1.05));const fill=new THREE.AmbientLight(0xfff2dc,.38);scene.add(fill);const key=new THREE.DirectionalLight(0xffd3a0,1.05);key.position.set(-8,11,10);key.castShadow=true;key.shadow.mapSize.set(1024,1024);scene.add(key);
 const mat=(c,r=1,m=0)=>new THREE.MeshStandardMaterial({color:c,roughness:r,metalness:m}),M={floor:mat(0x5c5146,.93),rock:mat(0x29231f,1),rock2:mat(0x40362e,1),dark:mat(0x20221f,.8,.28),metal:mat(0x454b49,.68,.5),wood:mat(0x62432f,.94),cloth:mat(0x6b5847,.98),blue:mat(0x315e70,.8,.28),white:mat(0xc9d1cd,.72,.12),green:mat(0x53684b,.9,.05),soil:mat(0x3b2b22,1),yellow:mat(0xa57228,.8,.2)};const add=o=>(root.add(o),o);function solid(x,z,w,d){colliders.push({minX:x-w/2,maxX:x+w/2,minZ:z-d/2,maxZ:z+d/2})}function box(w,h,d,m,x,y,z,ry=0,s=false){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);o.rotation.y=ry;o.castShadow=o.receiveShadow=true;add(o);if(s)solid(x,z,w,d);return o}function cyl(r,h,m,x,y,z,rz=0,s=false){const o=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,18),m);o.position.set(x,y,z);o.rotation.z=rz;o.castShadow=o.receiveShadow=true;add(o);if(s)solid(x,z,r*2,r*2);return o}function rock(x,y,z,s){const o=new THREE.Mesh(new THREE.DodecahedronGeometry(s,0),Math.random()>.5?M.rock:M.rock2);o.position.set(x,y,z);o.scale.set(1.35,.78,1);o.rotation.set(Math.random(),Math.random()*3,Math.random());o.castShadow=true;add(o)}function lamp(x,y,z,c,p=6,d=7){const b=new THREE.Mesh(new THREE.SphereGeometry(.09,10,8),new THREE.MeshStandardMaterial({color:c,emissive:c,emissiveIntensity:5}));b.position.set(x,y,z);add(b);const l=new THREE.PointLight(c,p,d,1.7);l.position.copy(b.position);l.castShadow=true;l.shadow.mapSize.set(256,256);add(l)}function pipeH(x,y,z,len,r=.13,m=M.metal){cyl(r,len,m,x,y,z,Math.PI/2)}function pipeV(x,y,z,len,r=.13,m=M.metal){cyl(r,len,m,x,y,z)}
 const loadingScreen=document.getElementById('loadingScreen'),loadingBar=document.getElementById('loadingBar'),loadingPct=document.getElementById('loadingPct'),loadingText=document.getElementById('loadingText');const assetManager=new THREE.LoadingManager();assetManager.onStart=()=>{if(loadingScreen)loadingScreen.classList.remove('done')};assetManager.onProgress=(url,loaded,total)=>{const pct=total?Math.round(loaded/total*100):0;if(loadingBar)loadingBar.style.width=pct+'%';if(loadingPct)loadingPct.textContent=pct+'%';if(loadingText)loadingText.textContent='جاري تحميل مجسمات الغرفة...'};assetManager.onLoad=()=>{if(loadingBar)loadingBar.style.width='100%';if(loadingPct)loadingPct.textContent='100%';if(loadingText)loadingText.textContent='تم تجهيز الغرفة';setTimeout(()=>loadingScreen?.classList.add('done'),260)};assetManager.onError=url=>{console.warn('Asset failed',url);if(loadingText)loadingText.textContent='تعذر تحميل أحد المجسمات — متابعة التشغيل'};const gltf=new GLTFLoader(assetManager),Q='./assets/vendor/quaternius-scifi/Modular%20SciFi%20MegaKit%5BStandard%5D/glTF/',K='./assets/vendor/kenney-furniture/Models/GLTF%20format/';async function qfit(path,x,y,z,w,h,d=.45,ry=0,s=false){try{const a=await gltf.loadAsync(Q+path),o=a.scene;o.rotation.y=ry;o.updateMatrixWorld(true);let b=new THREE.Box3().setFromObject(o),sz=b.getSize(new THREE.Vector3());o.scale.set(w/Math.max(sz.x,.001),h/Math.max(sz.y,.001),d/Math.max(sz.z,.001));o.updateMatrixWorld(true);b=new THREE.Box3().setFromObject(o);const c=b.getCenter(new THREE.Vector3());o.position.set(x-c.x,y-b.min.y,z-c.z);o.traverse(n=>{if(n.isMesh){n.castShadow=n.receiveShadow=true}});add(o);if(s)solid(x,z,w,d)}catch(e){console.warn(path)}}async function kprop(f,x,y,z,s=1,r=0,hit=false,w=1,d=1){try{const a=await gltf.loadAsync(K+f),o=a.scene;o.position.set(x,y,z);o.scale.setScalar(s);o.rotation.y=r;o.traverse(n=>{if(n.isMesh){n.castShadow=n.receiveShadow=true}});add(o);if(hit)solid(x,z,w,d)}catch(e){}}
+const PH='./assets/vendor/polyhaven/';
+async function phfit(asset,x,y,z,w,h,d,ry=0,sld=false){
+ try{
+  const a=await gltf.loadAsync(PH+asset+'/model.gltf'),o=a.scene;
+  o.rotation.y=ry;o.updateMatrixWorld(true);
+  let b=new THREE.Box3().setFromObject(o),sz=b.getSize(new THREE.Vector3());
+  o.scale.set(w/Math.max(sz.x,.001),h/Math.max(sz.y,.001),d/Math.max(sz.z,.001));
+  o.updateMatrixWorld(true);b=new THREE.Box3().setFromObject(o);const c=b.getCenter(new THREE.Vector3());
+  o.position.set(x-c.x,y-b.min.y,z-c.z);
+  o.traverse(n=>{if(n.isMesh){n.castShadow=true;n.receiveShadow=true}});
+  add(o);if(sld)solid(x,z,w,d);return o
+ }catch(e){console.warn('Poly Haven asset failed',asset,e)}
+}
+function phLight(asset,x,y,z,w,h,d,ry=0,color=0xffc27a,power=5,distance=5){
+ phfit(asset,x,y,z,w,h,d,ry,false);
+ const l=new THREE.PointLight(color,power,distance,1.7);l.position.set(x,y,z+.14);l.castShadow=true;l.shadow.mapSize.set(512,512);add(l);return l
+}
+
 function shell(i){const a=rooms[i][2],wide=i===8?18.5:(i===5?17.8:17),depth=i===9?9.6:8.9;if(i===0){
-// Room 1: engineered bunker shell. Rock is kept outside; the playable interior is modular metal.
-box(wide,.55,depth,M.rock,0,-.55,.05);box(wide,5.9,.72,M.rock,0,2.3,-4.18);box(.82,5.9,depth,M.rock,-wide/2+.18,2.3,.05);
-// continuous dark structural slab below modular deck
-box(wide-1.15,.18,depth-1.05,M.dark,.15,-.02,.08);
-// real Quaternius modular floor plates instead of procedural square tiles
-for(let x=-6.5;x<=6.5;x+=2.15)for(let z=-2.55;z<=2.55;z+=1.7)qfit('Platforms/Platform_DarkPlates.gltf',x,.075,z,2.05,.13,1.58,0,false);
-// wall system: Astra panels plus metal base rails and upper cable raceway
-for(let x=-6.35;x<=3.0;x+=2.2){qfit('Walls/WallAstra_Straight.gltf',x,.12,-3.47,2.16,4.42,.38);qfit('Walls/BottomMetal_Straight.gltf',x,.10,-3.20,2.16,.38,.30)}
-qfit('Walls/TopCables_Straight_Hanging.gltf',-4.25,4.02,-3.14,2.15,.62,.48);qfit('Walls/TopCables_Straight_Hanging.gltf',-1.95,4.02,-3.14,2.15,.62,.48);qfit('Walls/TopCables_Straight_Hanging.gltf',.35,4.02,-3.14,2.15,.62,.48);
-// exposed rock only at the cutaway/front edge, not as an interior finish
-for(let x=-wide/2+.45;x<wide/2-.45;x+=.68)rock(x,-.10,3.62,.25+Math.random()*.14);
-lamp(-4.7,3.72,-2.35,a,4.2,5);lamp(1.7,3.72,-2.35,a,4.2,5);return}
+ // Room 1 visible shell uses imported meshes only. Colliders remain invisible data.
+ for(let x=-6.45;x<=6.45;x+=2.15)for(let z=-2.55;z<=2.55;z+=1.70)qfit('Platforms/Platform_DarkPlates.gltf',x,.02,z,2.08,.16,1.62,0,false);
+ for(let x=-6.35;x<=3.05;x+=2.20){qfit('Walls/WallAstra_Straight.gltf',x,.08,-3.48,2.16,4.48,.40);qfit('Walls/BottomMetal_Straight.gltf',x,.08,-3.20,2.16,.42,.30)}
+ for(let z=-2.42;z<=2.42;z+=1.62){qfit('Walls/WallAstra_Straight.gltf',-7.58,.08,z,1.58,4.48,.40,Math.PI/2);qfit('Walls/BottomMetal_Straight.gltf',-7.30,.08,z,1.58,.42,.30,Math.PI/2)}
+ for(let x=-6.45;x<=5.25;x+=2.15)for(let z=-2.45;z<=1.05;z+=1.75)qfit('Platforms/Platform_Metal2.gltf',x,4.28,z,2.08,.12,1.65,0,false);
+ qfit('Walls/TopCables_Straight_Hanging.gltf',-4.3,3.95,-3.10,2.15,.66,.52);qfit('Walls/TopCables_Straight_Hanging.gltf',-2.0,3.95,-3.10,2.15,.66,.52);qfit('Walls/TopCables_Straight_Hanging.gltf',.3,3.95,-3.10,2.15,.66,.52);
+ solid(-7.72,0,.18,8.1);solid(0,-3.72,15.2,.18);
+ phLight('industrial_caged_sconce',-5.15,3.02,-3.01,.78,1.10,.52,0,0xffb86e,5.6,5.4);
+ phLight('industrial_caged_sconce',1.32,3.02,-3.01,.78,1.10,.52,0,0xffb86e,5.2,5.2);
+ phLight('hanging_industrial_lamp',-1.15,3.02,.42,.95,1.34,.95,0,0xffd29a,6.0,5.8);
+ return}
 box(wide,.65,depth,M.rock,0,-.48,.05);box(wide,5.9,.8,M.rock,0,2.3,-4.05);box(.9,5.9,depth,M.rock,-wide/2+.25,2.3,.05);box(wide-1.3,.28,depth-1.35,M.floor,.2,-.08,.05);for(let x=-wide/2+.8;x<wide/2-.8;x+=1.25)for(let z=-2.75;z<3;z+=1.18)box(1.16,.025,1.08,Math.random()>.45?M.floor:mat(0x6a5c4d,.98),x,.08,z);for(let x=-wide/2+.4;x<wide/2-.4;x+=.58)rock(x,-.02,3.38,.28+Math.random()*.2);for(let x=-6.2;x<=2.7;x+=2.25)qfit('Walls/WallAstra_Straight.gltf',x,.12,-3.42,2.15,4.45,.42);qfit('Walls/TopCables_Straight_Hanging.gltf',-1.7,4.1,-3.12,2.2,.65,.5);lamp(-4.7,3.8,-2.2,a,5,5);lamp(2.1,3.8,-2.2,a,5,5)}
 function door(type=0){const x=5.6;if(roomIndex===0&&type===0){
 // Room 1 uses a heavier square blast-door assembly, integrated into the wall.
@@ -29,43 +46,22 @@ qfit('Walls/BottomMetal_Straight.gltf',3.78,.10,-3.18,1.18,.38,.30);qfit('Walls/
 qfit('Props/Prop_AccessPoint.gltf',3.78,.58,-2.58,.76,1.08,.34);lamp(x,4.13,-2.38,rooms[roomIndex][2],6.5,5.5);return}
 if(type===2){box(3.4,4.4,.45,M.metal,x,2.2,-3.0);const ring=new THREE.Mesh(new THREE.TorusGeometry(1.05,.16,12,28),M.dark);ring.position.set(x,2.1,-2.7);add(ring);box(2.1,2.1,.22,M.dark,x,2.1,-2.68)}else{qfit('Platforms/Door_Frame_A.gltf',x,.1,-3.05,3.2,4.4,.75);qfit('Platforms/Door_DarkMetal.gltf',x,.2,-2.75,2.35,3.35,.3);if(type===1){box(.22,3.1,.22,M.yellow,4.05,1.7,-2.68);box(.22,3.1,.22,M.yellow,7.1,1.7,-2.68)}}qfit('Props/Prop_AccessPoint.gltf',4.15,.48,-2.55,.8,1.05,.35);lamp(x,4.05,-2.35,rooms[roomIndex][2],9,7)}
 function dress(i){if(i===0){
-door();
-// Premium living quarters: use real kit assets as the visual language, not primitive furniture.
-qfit('Props/Prop_Chest.gltf',-5.85,.12,1.95,1.55,.85,.85,0,true);
-qfit('Props/Prop_Crate4.gltf',-3.95,.12,2.28,.82,.72,.82,.18,true);
-qfit('Props/Prop_Crate4.gltf',-3.05,.12,2.05,.62,.55,.62,-.12,true);
-qfit('Props/Prop_Barrel_Large.gltf',2.75,.12,2.18,.72,1.18,.72,0,true);
-qfit('Props/Prop_AccessPoint.gltf',2.72,.78,-3.0,.92,1.18,.34,0,false);
-qfit('Props/Prop_Cable_1.gltf',-.9,.12,-2.92,2.6,.38,.28,0,false);
-qfit('Props/Prop_Cable_3.gltf',-5.2,.12,-2.93,2.15,.52,.28,0,false);
-// Existing furniture is retained only where it reads as believable shelter furniture.
-kprop('desk.glb',-4.45,.13,-1.82,1.12,0,true,1.55,.92);
-kprop('bookcaseOpen.glb',-6.45,.13,-2.28,1.08,0,true,1.05,.58);
-kprop('pottedPlant.glb',-6.72,.13,2.28,.9);
-// Built-in bunk alcove, mattress, blanket and under-bed storage.
-box(3.45,.18,1.62,M.metal,-4.75,.34,.92,0,true);
-box(3.18,.30,1.43,M.cloth,-4.75,.55,.92);
-box(1.18,.08,1.18,mat(0x8b674b,.96),-5.65,.73,.92,.08);
-box(1.15,.08,1.0,mat(0x4c6872,.94),-3.95,.73,.96,-.05);
-box(.88,.23,1.15,M.dark,-6.02,.20,.92);
-box(.88,.23,1.15,M.dark,-4.93,.20,.92);
-// Workbench details: books, terminal glow, mug, task lamp and wall storage.
-for(let n=0;n<6;n++)box(.26,.06,.38,mat([0x6f4937,0x3f5d6b,0x745f38,0x5b3f61][n%4],.88),-5.15+n*.29,1.06,-1.73,(n%2?-.05:.04));
-cyl(.11,.22,mat(0x8c7b69,.75,.08),-3.73,1.13,-1.65,0);
-const screen=box(.88,.58,.08,new THREE.MeshStandardMaterial({color:0x18343d,emissive:0x39d8ff,emissiveIntensity:2.3,roughness:.28}),-4.42,1.62,-2.17);
-lamp(-4.42,1.65,-2.02,0x62dcff,1.6,2.2);
-// Wall shelves and readable clutter silhouette.
-for(const yy of[1.55,2.35]){box(2.65,.10,.42,M.metal,-6.15,yy,-2.98);for(let n=0;n<7;n++)box(.18+.05*(n%2),.38+.08*(n%3),.28,mat([0x694a37,0x53636b,0x7b693e,0x493f58][n%4],.9),-7.15+n*.34,yy+.24,-2.82,0)}
-// Ceiling services and warm practical lighting.
-pipeH(-.35,3.28,-2.82,4.9,.12);pipeV(1.98,2.22,-2.82,2.2,.12);
-pipeH(-4.95,3.55,-2.88,3.15,.08,M.dark);
-lamp(-5.2,3.25,.35,0xffb36b,3.4,4.2);lamp(.7,3.55,-1.0,0xffd29a,2.4,3.4);
-// Small candle cluster for atmosphere; emissive flames + local light.
-for(const [cx,cz,ch] of[[-2.15,1.75,.32],[-1.88,1.82,.24],[-2.0,1.55,.19]]){cyl(.055,ch,mat(0xd8c7a0,.9),cx,.15+ch/2,cz);const flame=new THREE.Mesh(new THREE.SphereGeometry(.045,8,6),new THREE.MeshStandardMaterial({color:0xffc46b,emissive:0xff7b24,emissiveIntensity:5}));flame.scale.set(.65,1.4,.65);flame.position.set(cx,.18+ch,cz);add(flame)}
-lamp(-2.02,.62,1.72,0xff8a3d,1.8,2.4);
-// Rug and floor wear break up the grid without adding expensive geometry.
-box(2.9,.025,1.72,mat(0x3f4a48,.98),-.55,.235,1.38,.04);
-}if(i===1){door(1);for(const x of[-3.2,1.4]){box(3.4,.18,1.2,M.wood,x,.95,.25,0,true);for(const dx of[-1.1,1.1])box(.45,.6,.45,M.dark,x+dx,.35,.25,0,true)}box(2.2,2.2,.65,M.dark,-6.2,1.15,-2.4,0,true);pipeH(-.6,3.4,-2.85,7,.12)}if(i===2){door(1);box(5.2,.28,1.2,M.metal,-2.7,1,-1.6,0,true);qfit('Props/Prop_Barrel_Large.gltf',4.5,.12,1.7,.75,1.3,.75,0,true);qfit('Props/Prop_Crate4.gltf',5.7,.12,2.2,.9,.8,.9,0,true);pipeH(-1,3.2,-2.75,6.5,.17);pipeV(-4.2,2,-2.75,2.2,.17)}if(i===3){door();for(const x of[-4.6,-1.8,1.1]){box(2.2,1.2,.85,M.dark,x,.7,-1.55,0,true);const s=box(1.5,.62,.07,mat(0x183c3d,.35,.1),x,1.42,-1.08);s.material.emissive=new THREE.Color(0x48d8d0);s.material.emissiveIntensity=2}box(1.3,2.6,.7,M.dark,4.1,1.4,-2.1,0,true)}if(i===4){door();box(3.4,.3,1.35,M.white,-3.9,.58,.9,0,true);box(1.35,2.1,.7,M.white,1.3,1.1,-2,0,true);box(1.7,1.4,.85,M.white,3.3,.75,-2,0,true);kprop('pottedPlant.glb',-6.4,.13,2.2,.9);pipeH(-1.5,3.25,-2.75,4.8,.08,M.white)}if(i===5){door(2);for(const x of[-4.5,-1.4,1.8]){cyl(.9,2.9,M.blue,x,1.55,-.8,0,true);pipeH(x,3,-.8,2.9,.2,M.blue)}pipeH(-.8,3.45,-2.75,8.2,.18,M.blue);for(const x of[-5.7,-2.8,.2,3.2])pipeV(x,2.25,-2.75,2.3,.16,M.blue);box(2.4,1,1.2,M.dark,4.7,.6,1.6,0,true)}if(i===6){door();for(const x of[-4.8,-1.7,1.4,4.5]){box(2.35,.6,1.3,M.soil,x,.42,.8,0,true);for(let k=0;k<5;k++)cyl(.07,.6,M.green,x-.8+k*.4,.95,.8)}pipeH(0,2.9,2.55,10,.08,M.blue);lamp(0,3.5,-1.7,0xb8ff9e,9,7)}if(i===7){door(1);for(const x of[-4.5,-1.6,1.3,4.2]){box(1.9,1.8,1.2,M.dark,x,.95,-1,0,true);const e=box(1.15,.17,.08,mat(0x5d2a13,.45),x,1.4,-.38);e.material.emissive=new THREE.Color(0xff7a31);e.material.emissiveIntensity=2}pipeH(-.2,3.35,-2.75,8.8,.22);pipeV(-5.3,2.2,-2.75,2.3,.2)}if(i===8){door(1);for(let x=-7;x<7;x+=1.1)box(.8,.12,3.9,M.wood,x,.14,.8);box(14,.08,.13,M.metal,0,.3,-.55);box(14,.08,.13,M.metal,0,.3,2.05);box(3.2,.85,2.1,M.dark,2.8,.58,.8,0,true);box(2,1.4,1.4,M.dark,-4.8,.78,1.2,0,true);pipeH(0,3.45,-2.8,10,.12)}if(i===9){door(1);box(3.8,4.7,3,M.dark,2.6,2.3,-.15,0,true);for(let y=.5;y<4.5;y+=.48)box(1.25,.08,.13,M.metal,4.8,y,-2.55,0,true);pipeV(-4.8,2.5,-2.75,4,.18);pipeV(-3.9,2.5,-2.75,4,.18);lamp(2.6,4.65,-.1,0xf1f6dc,12,8)}}
+ qfit('Platforms/Door_Frame_SquareTall.gltf',5.55,.08,-3.18,3.55,4.35,.88,0,true);
+ qfit('Platforms/Door_Metal.gltf',5.55,.22,-2.86,2.62,3.48,.38,0,true);
+ qfit('Props/Prop_AccessPoint.gltf',3.92,.72,-2.73,.82,1.18,.34,0,false);
+ phLight('industrial_caged_sconce',5.55,3.68,-2.62,.72,1.02,.50,0,0xffa55d,6.4,5.0);
+ phfit('metal_office_desk',-4.55,.08,-1.72,2.55,1.08,1.25,0,true);
+ phfit('steel_frame_shelves_02',-6.32,.08,-2.45,2.15,3.02,.72,0,true);
+ phfit('drawer_cabinet',2.58,.08,-2.34,1.55,2.22,.74,0,true);
+ phfit('book_encyclopedia_set_01',-6.24,1.18,-2.02,1.42,.58,.44,0,false);
+ phfit('book_encyclopedia_set_01',-6.27,2.03,-2.02,1.26,.52,.43,0,false);
+ phfit('modular_industrial_pipes_01',-.20,.08,-2.78,4.72,3.18,.88,0,false);
+ qfit('Props/Prop_Chest.gltf',-5.74,.08,2.18,1.72,.94,.92,0,true);
+ qfit('Props/Prop_Crate4.gltf',-3.70,.08,2.40,.94,.80,.94,.12,true);
+ qfit('Props/Prop_Barrel_Large.gltf',2.86,.08,2.25,.80,1.32,.80,0,true);
+ phLight('hanging_industrial_lamp',-4.05,3.02,.62,.92,1.30,.92,0,0xffcf8c,5.1,4.9);
+ phLight('hanging_industrial_lamp',1.92,3.04,.62,.92,1.30,.92,0,0xffcf8c,5.1,4.9);
+ }if(i===1){door(1);for(const x of[-3.2,1.4]){box(3.4,.18,1.2,M.wood,x,.95,.25,0,true);for(const dx of[-1.1,1.1])box(.45,.6,.45,M.dark,x+dx,.35,.25,0,true)}box(2.2,2.2,.65,M.dark,-6.2,1.15,-2.4,0,true);pipeH(-.6,3.4,-2.85,7,.12)}if(i===2){door(1);box(5.2,.28,1.2,M.metal,-2.7,1,-1.6,0,true);qfit('Props/Prop_Barrel_Large.gltf',4.5,.12,1.7,.75,1.3,.75,0,true);qfit('Props/Prop_Crate4.gltf',5.7,.12,2.2,.9,.8,.9,0,true);pipeH(-1,3.2,-2.75,6.5,.17);pipeV(-4.2,2,-2.75,2.2,.17)}if(i===3){door();for(const x of[-4.6,-1.8,1.1]){box(2.2,1.2,.85,M.dark,x,.7,-1.55,0,true);const s=box(1.5,.62,.07,mat(0x183c3d,.35,.1),x,1.42,-1.08);s.material.emissive=new THREE.Color(0x48d8d0);s.material.emissiveIntensity=2}box(1.3,2.6,.7,M.dark,4.1,1.4,-2.1,0,true)}if(i===4){door();box(3.4,.3,1.35,M.white,-3.9,.58,.9,0,true);box(1.35,2.1,.7,M.white,1.3,1.1,-2,0,true);box(1.7,1.4,.85,M.white,3.3,.75,-2,0,true);kprop('pottedPlant.glb',-6.4,.13,2.2,.9);pipeH(-1.5,3.25,-2.75,4.8,.08,M.white)}if(i===5){door(2);for(const x of[-4.5,-1.4,1.8]){cyl(.9,2.9,M.blue,x,1.55,-.8,0,true);pipeH(x,3,-.8,2.9,.2,M.blue)}pipeH(-.8,3.45,-2.75,8.2,.18,M.blue);for(const x of[-5.7,-2.8,.2,3.2])pipeV(x,2.25,-2.75,2.3,.16,M.blue);box(2.4,1,1.2,M.dark,4.7,.6,1.6,0,true)}if(i===6){door();for(const x of[-4.8,-1.7,1.4,4.5]){box(2.35,.6,1.3,M.soil,x,.42,.8,0,true);for(let k=0;k<5;k++)cyl(.07,.6,M.green,x-.8+k*.4,.95,.8)}pipeH(0,2.9,2.55,10,.08,M.blue);lamp(0,3.5,-1.7,0xb8ff9e,9,7)}if(i===7){door(1);for(const x of[-4.5,-1.6,1.3,4.2]){box(1.9,1.8,1.2,M.dark,x,.95,-1,0,true);const e=box(1.15,.17,.08,mat(0x5d2a13,.45),x,1.4,-.38);e.material.emissive=new THREE.Color(0xff7a31);e.material.emissiveIntensity=2}pipeH(-.2,3.35,-2.75,8.8,.22);pipeV(-5.3,2.2,-2.75,2.3,.2)}if(i===8){door(1);for(let x=-7;x<7;x+=1.1)box(.8,.12,3.9,M.wood,x,.14,.8);box(14,.08,.13,M.metal,0,.3,-.55);box(14,.08,.13,M.metal,0,.3,2.05);box(3.2,.85,2.1,M.dark,2.8,.58,.8,0,true);box(2,1.4,1.4,M.dark,-4.8,.78,1.2,0,true);pipeH(0,3.45,-2.8,10,.12)}if(i===9){door(1);box(3.8,4.7,3,M.dark,2.6,2.3,-.15,0,true);for(let y=.5;y<4.5;y+=.48)box(1.25,.08,.13,M.metal,4.8,y,-2.55,0,true);pipeV(-4.8,2.5,-2.75,4,.18);pipeV(-3.9,2.5,-2.75,4,.18);lamp(2.6,4.65,-.1,0xf1f6dc,12,8)}}
 const player=new THREE.Group();scene.add(player);let model,mixer,baseY=0,bones,walkT=0;const axis=new THREE.Vector3(1,0,0),qq=new THREE.Quaternion();function bonesOf(r){const b={};r.traverse(o=>{if(!o.isBone)return;const n=o.name.toLowerCase().replace(/[^a-z]/g,'');if(/leftupleg/.test(n))b.lu=o;if(/rightupleg/.test(n))b.ru=o});return b}function bx(b,a){if(b){qq.setFromAxisAngle(axis,a);b.quaternion.multiply(qq)}}function walk(s){if(!bones)return;const p=Math.sin(walkT),k=Math.min(1,s/2.5);bx(bones.lu,p*.34*k);bx(bones.ru,-p*.34*k);model.position.y=baseY+Math.abs(p)*.018*k}const fbx=new FBXLoader();Promise.all([fbx.loadAsync('./assets/kenney/characterMedium.fbx'),fbx.loadAsync('./assets/kenney/idle.fbx'),new THREE.TextureLoader().loadAsync('./assets/kenney/humanMaleA.png')]).then(([o,idle,t])=>{t.colorSpace=THREE.SRGBColorSpace;t.flipY=true;o.updateMatrixWorld(true);let b=new THREE.Box3().setFromObject(o),sz=b.getSize(new THREE.Vector3());o.scale.setScalar(1.72/sz.y);o.updateMatrixWorld(true);b=new THREE.Box3().setFromObject(o);const c=b.getCenter(new THREE.Vector3());o.position.x-=c.x;o.position.y-=b.min.y;o.position.z-=c.z;o.traverse(n=>{if(n.isMesh){n.castShadow=n.receiveShadow=true;n.material=new THREE.MeshStandardMaterial({map:t,roughness:.82})}});model=o;player.add(o);baseY=o.position.y;bones=bonesOf(o);mixer=new THREE.AnimationMixer(o);if(idle.animations[0])mixer.clipAction(idle.animations[0],o).play()});function hit(x,z){const r=.32;return colliders.some(c=>x+r>c.minX&&x-r<c.maxX&&z+r>c.minZ&&z-r<c.maxZ)}function move(dx,dz){const nx=THREE.MathUtils.clamp(player.position.x+dx,-7,6.8),nz=THREE.MathUtils.clamp(player.position.z+dz,-2.55,2.75);if(!hit(nx,player.position.z))player.position.x=nx;if(!hit(player.position.x,nz))player.position.z=nz}
 const arPlayerLocal=new THREE.Vector3(-.3,.12,1.9),arPlayerWorld=new THREE.Vector3(),arPlayerAxis=new THREE.Vector3(0,1,0),arLocalForward=new THREE.Vector3(),arLocalRight=new THREE.Vector3();let arPlayerFacing=0;function syncArPlayer(){if(xrKind!=='ar'||!root)return;arPlayerWorld.copy(arPlayerLocal).multiplyScalar(arScale).applyAxisAngle(arPlayerAxis,arYaw).add(root.position);player.position.copy(arPlayerWorld);player.scale.setScalar(arScale);player.rotation.y=arYaw+arPlayerFacing;player.visible=arPlaced}function resetArPlayer(){arPlayerLocal.set(-.3,.12,1.9);arPlayerFacing=0;syncArPlayer()}function moveArPlayer(dx,dz,dt){const nx=THREE.MathUtils.clamp(arPlayerLocal.x+dx,-7,6.8),nz=THREE.MathUtils.clamp(arPlayerLocal.z+dz,-2.55,2.75);let moved=false;if(!hit(nx,arPlayerLocal.z)){arPlayerLocal.x=nx;moved=true}if(!hit(arPlayerLocal.x,nz)){arPlayerLocal.z=nz;moved=true}if(moved){arPlayerFacing=Math.atan2(dx,dz);syncArPlayer();const sp=Math.hypot(dx,dz)/Math.max(dt,.001);if(model&&sp>.05){walkT+=dt*7;walk(sp)}}}
 const doorPoint=new THREE.Vector3(4.15,.9,-2.55);function nearDoor(){if(xrKind==='vr')return Math.hypot(xrRig.position.x-doorPoint.x,xrRig.position.z-doorPoint.z)<1.65;if(xrKind==='ar')return true;return Math.hypot(player.position.x-doorPoint.x,player.position.z-doorPoint.z)<1.65}
