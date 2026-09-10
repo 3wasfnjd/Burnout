@@ -27,6 +27,7 @@ document.body.prepend(renderer.domElement);
 const camera = new THREE.PerspectiveCamera(66, innerWidth / innerHeight, 0.05, 80);
 const player = new THREE.Group();
 player.position.set(0, 0, 3.9);
+const MOVE_SPEED = 2.5; // world units/sec — also the speed the run cycle is scaled against, see setAvatarMotion
 camera.position.set(0, .48, 2.2);
 player.add(camera);
 scene.add(player);
@@ -38,9 +39,14 @@ scene.add(player);
 const isoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, .1, 40);
 const isoOffset = new THREE.Vector3(6.6, 7.8, 6.6);
 const isoTarget = new THREE.Vector3();
+const roomCenter = new THREE.Vector3(0, .9, 0);
 function fitIsoCamera(){
   const aspect = innerWidth / innerHeight;
-  const halfHeight = 4.3;
+  // Room footprint is ~10.8 x 10 (walls at x:±5.4, z:±5.0) - 6.4 keeps
+  // most of that in frame like the reference (~75-80% of the room visible
+  // at once) instead of the old tight follow-crop that only showed the
+  // small area right around the character.
+  const halfHeight = 6.4;
   const halfWidth = halfHeight * aspect;
   isoCamera.left = -halfWidth; isoCamera.right = halfWidth;
   isoCamera.top = halfHeight; isoCamera.bottom = -halfHeight;
@@ -114,18 +120,20 @@ Promise.all([
   avatar.rotation.y=Math.PI;
 }).catch(e=>console.warn('BUNKER 17 character failed to load',e));
 
-function setAvatarMotion(moving){
-  if(!avatarModel||moving===avatarMoving)return;
+function setAvatarMotion(moving,speed=0){
+  if(!avatarModel)return;
+  if(moving&&avatarRun)avatarRun.timeScale=THREE.MathUtils.clamp(speed/MOVE_SPEED,.35,1.6);
+  if(moving===avatarMoving)return;
   avatarMoving=moving;
   if(moving&&avatarRun){avatarIdle?.fadeOut(.18);avatarRun.reset().fadeIn(.18).play();}
   else if(avatarIdle){avatarRun?.fadeOut(.18);avatarIdle.reset().fadeIn(.18).play();}
 }
-function syncFlatAvatar(facingAngle,dt){
+function syncFlatAvatar(facingAngle,dt,speed=0){
   if(!avatarModel)return;
   avatar.position.set(player.position.x,0,player.position.z);
   if(facingAngle!==null)avatar.rotation.y=facingAngle;
   avatarMixer?.update(dt);
-  setAvatarMotion(facingAngle!==null);
+  setAvatarMotion(facingAngle!==null,speed);
 }
 const cache = new Map();
 const loadingScreen = document.getElementById('loadingScreen');
@@ -188,6 +196,8 @@ async function fit(url, position, size, rotationY = 0, parent = room) {
 
 const Q = './assets/vendor/quaternius-scifi/Modular%20SciFi%20MegaKit%5BStandard%5D/glTF/';
 const PH = './assets/vendor/polyhaven/';
+const KF = './assets/vendor/kenney-furniture/Models/GLTF%20format/';
+const KX = './assets/vendor/kenney-extras/';
 const paths = {
   floor: Q + 'Platforms/Platform_DarkPlates.gltf',
   wall: Q + 'Walls/WallAstra_Straight.gltf',
@@ -197,10 +207,24 @@ const paths = {
   pipes: PH + 'modular_industrial_pipes_01/model.gltf',
   sconce: PH + 'industrial_caged_sconce/model.gltf',
   hanging: PH + 'hanging_industrial_lamp/model.gltf',
-  desk: PH + 'metal_office_desk/model.gltf',
-  shelves: PH + 'steel_frame_shelves_02/model.gltf',
   cabinet: PH + 'drawer_cabinet/model.gltf',
-  books: PH + 'book_encyclopedia_set_01/model.gltf'
+  books: PH + 'book_encyclopedia_set_01/model.gltf',
+  // Warm CC0 furniture (Kenney Furniture Kit, already vendored in-repo) —
+  // swapped in for the desk/shelf so the "living quarters" half of the
+  // room reads cozy/wood instead of cold industrial metal.
+  desk: KF + 'desk.glb',
+  chairDesk: KF + 'chairDesk.glb',
+  deskLamp: KF + 'lampRoundTable.glb',
+  bookcase: KF + 'bookcaseOpen.glb',
+  bed: KF + 'bedSingle.glb',
+  pillow: KF + 'pillow.glb',
+  rug: KF + 'rugRectangle.glb',
+  pottedPlant: KF + 'pottedPlant.glb',
+  plantSmall: KF + 'plantSmall1.glb',
+  sideTable: KF + 'sideTable.glb',
+  lantern: KX + 'lantern-glass.glb',
+  chest: KX + 'chest.glb',
+  mug: KX + 'mug.glb'
 };
 
 // Bunker lighting rig — reads as "emergency power" at first (dim, red-lit,
@@ -221,6 +245,8 @@ const consoleGlow=new THREE.PointLight(0x54d7bf,.25,4,2);consoleGlow.position.se
 const doorLight=new THREE.PointLight(0xff281f,1.4,3.6,2);doorLight.position.set(0,2.6,-5.1);room.add(doorLight);
 const wallWashLights=[];
 for(const [x,y,z] of [[-4.1,2.0,-2.5],[4.1,2.0,-2.5],[-4.1,2.0,2.2],[4.1,2.0,2.2]]){const l=new THREE.PointLight(0xbfe3ff,0,6,1.8);l.position.set(x,y,z);l.castShadow=false;room.add(l);wallWashLights.push(l);}
+const lanternGlowBed=new THREE.PointLight(0xffb347,.9,3.2,2);lanternGlowBed.position.set(-4.55,.35,3.5);room.add(lanternGlowBed);
+const lanternGlowNook=new THREE.PointLight(0xffb347,.85,3.0,2);lanternGlowNook.position.set(3.6,.75,3.8);room.add(lanternGlowNook);
 
 async function buildRoom(){
   const crackedFloorTexture = await new Promise((resolve,reject)=>{
@@ -251,11 +277,31 @@ async function buildRoom(){
   await fit(paths.sconce,[-4.92,2.0,2.15],[.65,.85,.55],Math.PI/2);await fit(paths.sconce,[4.92,2.0,2.15],[.65,.85,.55],-Math.PI/2);
   await fit(paths.pipes,[-4.55,.25,-.5],[1.15,3.1,3.5],Math.PI/2);
   await fit(paths.desk,[-1.1,.05,1.25],[2.5,1.3,1.5],Math.PI);
-  await fit(paths.shelves,[4.15,.05,1.55],[1.7,3.1,1.05],-Math.PI/2);
+  await fit(paths.chairDesk,[-1.1,.02,2.05],[.7,1.05,.7],0);
+  await fit(paths.deskLamp,[-.35,.9,.75],[.4,.6,.4],0);
+  await fit(paths.bookcase,[4.15,.05,1.55],[1.05,1.9,.5],-Math.PI/2);
   await fit(paths.cabinet,[3.8,.04,-3.15],[1.55,2.4,.9],-Math.PI/2);
   await fit(paths.books,[4.12,1.3,1.15],[1.1,.65,.75],-Math.PI/2);
   await fit(paths.access,[1.2,1.15,-4.72],[1.25,1.0,.42],0);await fit(paths.access,[-1.2,1.15,-4.72],[1.25,1.0,.42],0);
   await fit(paths.cable,[-2.1,.05,2.9],[2.4,.35,1.6],0);await fit(paths.cable,[2.3,.05,2.65],[2.2,.35,1.4],Math.PI/2);
+
+  // Cozy bed nook (front-left, clear of the power/pressure station hitboxes) —
+  // this is the part of the room that reads most different from a bare
+  // sci-fi corridor: rug + bed + pillow + a lantern and small chest on the floor.
+  await fit(paths.rug,[-3.6,.01,3.35],[2.1,.04,1.35],Math.PI/2);
+  await fit(paths.bed,[-3.6,.02,3.6],[1.05,.6,2.05],Math.PI/2);
+  await fit(paths.pillow,[-3.95,.6,2.75],[.42,.24,.32],Math.PI/2);
+  await fit(paths.lantern,[-4.55,.02,3.5],[.3,.42,.3],0);
+  await fit(paths.chest,[-3.6,.02,4.55],[.8,.55,.48],0);
+
+  // Second small lantern-lit nook, front-right, mirroring the bed corner
+  // and matching the reference's warm side-table-with-mug detail.
+  await fit(paths.sideTable,[3.6,.02,3.8],[.55,.55,.55],0);
+  await fit(paths.lantern,[3.6,.55,3.8],[.28,.4,.28],0);
+  await fit(paths.mug,[3.85,.58,3.62],[.13,.13,.13],0);
+
+  await fit(paths.pottedPlant,[-4.95,.02,4.6],[.55,1.0,.55],0);
+  await fit(paths.plantSmall,[4.85,.02,-4.55],[.4,.55,.4],0);
 }
 
 const stageNames=['الطاقة','الضغط','الأدلة','لوحة التحكم','باب الخروج'];let stage=0;let completed=[false,false,false,false,false];
@@ -346,7 +392,7 @@ function tick(time,frame){
     emergency.intensity=emergencyBaseIntensity*flicker;
   }
   if(xrMode==='flat'){
-    const f=(keys.KeyW?1:0)-(keys.KeyS?1:0)-jy;const r=(keys.KeyD?1:0)-(keys.KeyA?1:0)+jx;const v=new THREE.Vector3(r,0,-f);if(v.lengthSq()>1)v.normalize();v.multiplyScalar(2.5*dt);player.position.add(v);player.position.x=THREE.MathUtils.clamp(player.position.x,-4.65,4.65);player.position.z=THREE.MathUtils.clamp(player.position.z,-4.35,4.35);syncFlatAvatar(v.lengthSq()>.00001?Math.atan2(v.x,v.z):null,dt);isoTarget.set(player.position.x,.9,player.position.z);isoCamera.position.copy(isoTarget).add(isoOffset);isoCamera.lookAt(isoTarget);const s=nearestStation();if(s&&hint)hint.textContent=`${s.name} — اضغط تفاعل`;else if(hint)hint.textContent=`النظام ${stage+1}/5 — ${stageNames[stage]}`;
+    const f=(keys.KeyW?1:0)-(keys.KeyS?1:0)-jy;const r=(keys.KeyD?1:0)-(keys.KeyA?1:0)+jx;const v=new THREE.Vector3(r,0,-f);const moveMag=Math.min(v.length(),1);if(moveMag>0)v.normalize();const curSpeed=moveMag*MOVE_SPEED;v.multiplyScalar(curSpeed*dt);player.position.add(v);player.position.x=THREE.MathUtils.clamp(player.position.x,-4.65,4.65);player.position.z=THREE.MathUtils.clamp(player.position.z,-4.35,4.35);syncFlatAvatar(moveMag>.02?Math.atan2(v.x,v.z):null,dt,curSpeed);isoTarget.set(THREE.MathUtils.lerp(roomCenter.x,player.position.x,.28),.9,THREE.MathUtils.lerp(roomCenter.z,player.position.z,.28));isoCamera.position.copy(isoTarget).add(isoOffset);isoCamera.lookAt(isoTarget);const s=nearestStation();if(s&&hint)hint.textContent=`${s.name} — اضغط تفاعل`;else if(hint)hint.textContent=`النظام ${stage+1}/5 — ${stageNames[stage]}`;
   } else if(xrMode==='vr') {
     moveVR(dt);
   } else if(xrMode==='ar') {
