@@ -1,0 +1,6 @@
+Kenney CC0 props not included in the repo's existing Furniture Kit folder:
+- lantern-glass.glb  — Kenney Graveyard Kit  (https://kenney.nl/assets/graveyard-kit)
+- chest.glb          — Kenney Pirate Kit     (https://kenney.nl/assets/pirate-kit)
+- mug.glb            — Kenney Food Kit       (https://kenney.nl/assets/food-kit)
+License: CC0 1.0 (public domain) - https://creativecommons.org/publicdomain/zero/1.0/
+Fetched via CC0 GLB mirror: https://github.com/eturner58/game-assets
